@@ -4,6 +4,21 @@
 Ship the v1 sweepstake app in time for draw day on **2026-06-11**. The app is already deployed; ongoing work is incremental polish.
 
 ## Most recent change
+**Kickoff display switched from ET to UK local time (BST, UTC+1).**
+
+### Why
+Host and players are UK-based; "HH:MM ET" forced everyone to do mental arithmetic. The user asked to display GMT-including-daylight-saving — i.e. UK wall-clock time, which during the tournament window (Thu 11 Jun → Sat 27 Jun 2026) is firmly BST/UTC+1.
+
+### Files touched
+- `sweepstake/data.js` — `fmtKo(fx)` rewritten: parses the stored ET time, adds 5h (ET=EDT=UTC−4 → BST=UTC+1 in June), formats `HH:MM BST`, and emits a `(+1)` suffix whenever the BST datetime falls on the UK calendar day AFTER the matchday's nominal date. That covers both 19:00+ ET kickoffs (wrap past UK midnight) and the 00:00–05:59 ET late-night ones (already next-ET-day morning by ESPN convention). Comment block above the fixtures array updated to document the ET-stored / BST-displayed split. Stored ET values + `koSortKey` unchanged (a constant +5h offset preserves chronological order).
+
+### Verification done
+Off-app node sanity-script ran over all 72 fixtures: 13 distinct ET kickoffs map cleanly to BST. Day 3 (Sat 13 Jun) ordering still QAT-SUI 20:00 BST → BRA-MAR 23:00 BST → HAI-SCO 02:00 BST (+1) → AUS-TUR 05:00 BST (+1).
+
+### Files unchanged
+`screens1.jsx` (`Today.FixtureRow` already calls `fmtKo(f)` — picks up the new format automatically), everything else.
+
+### Earlier this session
 **FIFA points refreshed to the 10 Jun 2026 live ranking.**
 
 ### Why

@@ -88,9 +88,11 @@
   }
 
   /* ---- fixtures: official 2026 group-stage schedule -------------------- */
-  /* 72 matches, 17 matchdays (Thu 11 Jun → Sat 27 Jun). Times are ET 24h.
-     ESPN/FIFA schedule grouped late-night kickoffs (00:00–05:00 ET) with the
-     PREVIOUS matchday, so e.g. day 3 (Sat 13 Jun) includes AUS-TUR at 00:00.
+  /* 72 matches, 17 matchdays (Thu 11 Jun → Sat 27 Jun). Times stored as ET 24h
+     (source: ESPN/FIFA). Displayed in UK local time (BST, UTC+1 throughout the
+     tournament window) via `fmtKo()`. The schedule groups late-night kickoffs
+     (00:00–05:00 ET) with the PREVIOUS matchday, so e.g. day 3 (Sat 13 Jun)
+     includes AUS-TUR at 00:00 ET (= 05:00 BST Sun morning, shown with `(+1)`).
      `koSortKey()` rolls AM hours past midnight so the day's matches sort in
      chronological play order.                                              */
   const TOURNAMENT_START = "2026-06-11";
@@ -113,10 +115,21 @@
     const [h, m] = ko.split(":").map(Number);
     return (h < 6 ? h + 24 : h) * 60 + m;
   }
-  // display-formatted kickoff (HH:MM ET, with +1 hint for late-night wraps)
+  // display-formatted kickoff in UK time. Source values are ET 24h; convert to
+  // BST (UTC+1, the UK offset throughout Jun 11–27 2026 daylight saving) by
+  // adding 5 hours to ET (which is EDT/UTC−4 in June). Mark `(+1)` when the
+  // BST datetime falls on the UK day AFTER the matchday's nominal date — that
+  // covers both evening ET kickoffs (19:00+ ET wraps past UK midnight) and the
+  // late-night ET ones (00:00–05:59 ET, which are next-ET-day morning anyway).
   function fmtKo(fx) {
-    const h = parseInt(fx.ko.slice(0, 2), 10);
-    return fx.ko + " ET" + (h < 6 ? " (+1)" : "");
+    const [h, m] = fx.ko.split(":").map(Number);
+    const etDayOffset = h < 6 ? 1 : 0;          // ET 00–05 belongs to next ET day
+    const bstAbs = h + 5;                        // ET → BST = +5h in June
+    const bstHour = bstAbs % 24;
+    const ukDayOffset = etDayOffset + Math.floor(bstAbs / 24);
+    const hh = String(bstHour).padStart(2, "0");
+    const mm = String(m).padStart(2, "0");
+    return `${hh}:${mm} BST` + (ukDayOffset > 0 ? " (+1)" : "");
   }
 
   // helper to keep entries compact
