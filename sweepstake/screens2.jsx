@@ -204,7 +204,12 @@ function Teams({ state, go }) {
 function Admin({ state, update, go }) {
   const [adminDay, setAdminDay] = useState(state.currentDay);
   const [newName, setNewName] = useState("");
+  const [picks, setPicks] = useState(() => ({ ...(state.draw.assignments || {}) }));
   const dayFx = fxDay(adminDay);
+  const pickCounts = useMemo(() => {
+    const c = {}; Object.values(picks).forEach(pid => { if (pid) c[pid] = (c[pid] || 0) + 1; }); return c;
+  }, [picks]);
+  const pickedTotal = Object.values(picks).filter(Boolean).length;
 
   function setScore(id, side, val) {
     update(s => {
@@ -233,6 +238,15 @@ function Admin({ state, update, go }) {
   function clearAll() {
     if (!confirm("Remove all players and reset the draw? Pool name, pot, currency and host code are kept.")) return;
     update(s => window.Store.clearPlayers(s));
+  }
+  function setPick(code, pid) { setPicks(p => { const n = { ...p }; if (pid) n[code] = pid; else delete n[code]; return n; }); }
+  function commitManual() {
+    if (pickedTotal === 0) return;
+    const msg = state.draw.done
+      ? `Overwrite the current draw with these ${pickedTotal} assignment${pickedTotal === 1 ? "" : "s"}?`
+      : `Commit this draw with ${pickedTotal} of 48 team${pickedTotal === 1 ? "" : "s"} assigned?`;
+    if (!confirm(msg)) return;
+    update(s => window.Store.commitManualDraw(s, picks));
   }
 
   return (
@@ -307,6 +321,73 @@ function Admin({ state, update, go }) {
               <div className="mono muted" style={{ fontSize: 11.5, marginTop: 12, lineHeight: 1.5 }}>
                 The draw is already done — adding or removing players won't re-deal teams. Use <b>Clear all</b> to reset and run the draw again.
               </div>}
+          </div>
+
+          {/* manual draw entry */}
+          <div className="panel">
+            <div className="kept">Enter draw manually</div>
+            <div className="mono muted" style={{ fontSize: 12.5, marginTop: 8, lineHeight: 1.5 }}>
+              Already ran the draw offline? Assign each team to its owner below — no animation needed.
+              {state.draw.done && <> The current draw is loaded; change picks and save to overwrite.</>}
+            </div>
+
+            {state.players.length === 0
+              ? <div className="mono muted" style={{ fontSize: 12.5, marginTop: 10, lineHeight: 1.5, color: "var(--ink)" }}>
+                  Add players above first — then come back to assign their teams.
+                </div>
+              : <>
+                  <div style={{ marginTop: 12, display: "flex", flexWrap: "wrap", gap: 6 }}>
+                    {state.players.map(p => {
+                      const n = pickCounts[p.id] || 0;
+                      return (
+                        <div key={p.id} className="row" style={{ gap: 6, padding: "4px 10px 4px 4px",
+                          border: "1px solid var(--line)", borderRadius: 999, background: "var(--card)" }}>
+                          <Avatar player={p} size={20} />
+                          <span className="mono" style={{ fontSize: 12 }}>{p.name}</span>
+                          <span className="mono" style={{ fontSize: 12, fontWeight: 600, color: n ? "var(--pop)" : "var(--ink-faint)" }}>{n}</span>
+                        </div>
+                      );
+                    })}
+                  </div>
+
+                  <div style={{ marginTop: 14, display: "grid", gap: 14 }}>
+                    {GL.map(g => {
+                      const inGroup = ALLT.filter(t => t.group === g).sort((a, b) => b.fifa - a.fifa);
+                      return (
+                        <div key={g}>
+                          <div className="mono" style={{ fontSize: 11, letterSpacing: ".1em", color: "var(--ink-soft)", marginBottom: 6 }}>GROUP {g}</div>
+                          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(220px, 1fr))", gap: 6 }}>
+                            {inGroup.map(t => (
+                              <div key={t.code} className="row" style={{ gap: 8, padding: "5px 8px",
+                                border: "1px solid var(--line)", borderRadius: 8, background: picks[t.code] ? "var(--paper-2)" : "var(--card)" }}>
+                                <Crest team={t} h={18} fs={10} />
+                                <span className="mono" style={{ fontSize: 11.5, fontWeight: 600, minWidth: 32 }}>{t.code}</span>
+                                <select className="field" value={picks[t.code] || ""}
+                                  onChange={e => setPick(t.code, e.target.value)}
+                                  style={{ flex: 1, minWidth: 0, padding: "4px 6px", fontSize: 12 }}>
+                                  <option value="">— pick —</option>
+                                  {state.players.map(p => (
+                                    <option key={p.id} value={p.id}>{p.name}</option>
+                                  ))}
+                                </select>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+
+                  <div className="row" style={{ gap: 10, marginTop: 14, flexWrap: "wrap", alignItems: "center" }}>
+                    <Btn kind="primary" size="sm" onClick={commitManual} disabled={pickedTotal === 0}>
+                      {state.draw.done ? "Save changes" : "Commit draw"}
+                    </Btn>
+                    <Btn kind="ghost" size="sm" onClick={() => setPicks({})} disabled={pickedTotal === 0}>Clear picks</Btn>
+                    <div className="mono muted" style={{ fontSize: 11.5, marginLeft: "auto" }}>
+                      {pickedTotal}/48 teams assigned
+                    </div>
+                  </div>
+                </>}
           </div>
 
           {/* matchday control */}

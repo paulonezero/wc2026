@@ -303,7 +303,7 @@ function Today({ state, go }) {
 /*  THE DRAW — admin-run animated reveal (screen-shared)                      */
 /* ========================================================================== */
 const DRAW_SPEEDS = [
-  { key: "relaxed", label: "Relaxed", mult: 1.45 },
+  { key: "relaxed", label: "Relaxed", mult: 2.1 },
   { key: "normal",  label: "Normal",  mult: 1.0 },
   { key: "quick",   label: "Quick",   mult: 0.62 },
 ];
@@ -596,8 +596,7 @@ function Draw({ state, update, go }) {
                       .map(({ o, p }) => {
                       const got = receivedIds.has(o.playerId);
                       const isCurrent = pick && pick.playerId === o.playerId
-                        && (sub === "spin" || sub === "land")
-                        && !got;
+                        && sub === "land";
                       return (
                         <div key={o.code} className={"tier-player" + (got ? " got" : "") + (isCurrent ? " on" : "")} title={p?.name}>
                           <Avatar player={p} size={26} />

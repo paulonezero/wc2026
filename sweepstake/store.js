@@ -109,6 +109,23 @@
     state.phase = "drawn";
     return state;
   }
+  // Write a manually-entered draw result. `picks` is { teamCode: playerId }.
+  // Unassigned teams and picks for missing players are skipped silently.
+  function commitManualDraw(state, picks) {
+    const playerIds = new Set(state.players.map(p => p.id));
+    const assignments = {};
+    const order = [];
+    TEAMS.forEach(t => {
+      const pid = picks[t.code];
+      if (pid && playerIds.has(pid)) {
+        assignments[t.code] = pid;
+        order.push({ code: t.code, playerId: pid, tier: 1, tierTotal: 1 });
+      }
+    });
+    state.draw = { done: true, assignments, order };
+    state.phase = "drawn";
+    return state;
+  }
 
   /* ---- results & matchday ----------------------------------------------- */
   function recordFixtureScore(state, fixtureId, hs, as) {
@@ -168,7 +185,7 @@
 
   window.Store = {
     KEY, AVA, defaultState, load, save, freshTeams,
-    addPlayer, signUp, removePlayer, computeDraw, computeTiers, commitDraw,
+    addPlayer, signUp, removePlayer, computeDraw, computeTiers, commitDraw, commitManualDraw,
     recordFixtureScore, advanceDay, setTeamStatus, demoState, reset, shuffle,
     seedPlayers, clearPlayers,
   };
