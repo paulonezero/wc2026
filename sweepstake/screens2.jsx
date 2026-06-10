@@ -22,7 +22,7 @@ function Standings({ state, go }) {
   const leader = ranked[0];
   const teamsByOdds = ALLT.filter(t => isAlive(state, t.code)).sort((a, b) => tp[b.code] - tp[a.code]);
   const maxT = tp[teamsByOdds[0]?.code] || 1;
-  const potOf = prob => state.currency + Math.round(prob * state.pot);
+  const potOf = prob => state.currency + (state.pot ? Math.round(prob * state.pot) : "?");
 
   return (
     <div className="fadein">
@@ -30,7 +30,7 @@ function Standings({ state, go }) {
         <div>
           <div className="display" style={{ fontSize: 34, textTransform: "uppercase" }}>The Standings</div>
           <div className="muted" style={{ fontSize: 14 }}>
-            Each player's chance of owning the champion · {state.currency}{state.pot} pot
+            Each player's chance of owning the champion · {state.currency}{state.pot || "?"} pot
           </div>
         </div>
       </div>

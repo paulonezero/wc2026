@@ -18,7 +18,14 @@ function CheatModal({ onClose }) {
       zIndex: 50, display: "flex", alignItems: "center", justifyContent: "center", padding: 20 }}>
       <div onClick={e => e.stopPropagation()} className="panel fadein"
            style={{ maxWidth: 440, width: "100%", textAlign: "center", padding: "36px 32px" }}>
-        <div className="kept" style={{ color: "var(--red)" }}>Busted</div>
+        <div style={{ fontSize: 72, lineHeight: 1, marginBottom: 6, letterSpacing: 8 }}>
+          <span className="siren-pulse">🚨</span>
+          <span className="siren-pulse" style={{ animationDelay: ".25s" }}>🚨</span>
+          <span className="siren-pulse" style={{ animationDelay: ".5s" }}>🚨</span>
+        </div>
+        <div className="kept" style={{ color: "var(--red)" }}>
+          <span style={{ marginRight: 6, verticalAlign: "-1px" }}>🥷</span>Busted
+        </div>
         <div className="display" style={{ fontSize: 40, textTransform: "uppercase", margin: "8px 0 10px" }}>Nice try.</div>
         <div className="muted" style={{ fontSize: 15.5, lineHeight: 1.55, maxWidth: 340, margin: "0 auto" }}>
           Cheating attempt logged :)
@@ -128,7 +135,7 @@ function SignUp({ state, onJoin, onForget, go }) {
         </div>
         <div style={{ color: "#D8CFBE", maxWidth: 540, lineHeight: 1.5, fontSize: 17 }}>
           One username, that's it — no passwords, no faff. You'll be dealt a handful of teams at the draw.
-          Own the team that goes furthest and the {state.currency}{state.pot} pot is yours.
+          Own the team that goes furthest and the {state.currency}{state.pot || "?"} pot is yours.
         </div>
         <div style={{ marginTop: 24, display: "flex", gap: 10, maxWidth: 480 }}>
           <input className="field" placeholder="Pick a username…" value={name}
@@ -138,7 +145,8 @@ function SignUp({ state, onJoin, onForget, go }) {
         </div>
         <div style={{ marginTop: 14 }}>
           <Btn kind="gold" size="sm" onClick={() => setGotcha(true)} disabled={!name.trim()}>
-            Donate to Paul's Revolut for a better set of teams
+            <span style={{ marginRight: 8, fontSize: "1.1em", verticalAlign: "-1px" }}>🥷</span>
+            Psst… donate to Paul's Revolut for a better set of teams
           </Btn>
         </div>
         <div className="mono" style={{ color: "#8A8170", fontSize: 12.5, marginTop: 12 }}>

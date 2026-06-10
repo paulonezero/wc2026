@@ -19,8 +19,8 @@
     return {
       v: 2,
       poolName: "The Office Pool",
-      pot: 240,
-      currency: "£",
+      pot: 0,
+      currency: "€",
       adminPin: "2026",        // host unlock code
       phase: "lobby",          // lobby -> drawn
       drawDate: "2026-06-11",
@@ -106,6 +106,7 @@
 
   function demoState() {
     const s = defaultState();
+    s.pot = 240;               // give the demo a real pot so the share breakdown displays
     DEMO_NAMES.forEach(n => addPlayer(s, n));
     commitDraw(s);
     s.currentDay = 8;          // round 2 wrapping up; yesterday (7) + today (8) populated

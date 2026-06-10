@@ -140,7 +140,7 @@ function App() {
         </div>
         <div className="potchip">
           <span className="pl">Pot</span>
-          <span className="pv">{state.currency}{state.pot}</span>
+          <span className="pv">{state.currency}{state.pot || "?"}</span>
         </div>
         {admin
           ? <button className="hostbtn on" onClick={lock} title="Exit host mode"><span className="hostdot"></span> Host</button>

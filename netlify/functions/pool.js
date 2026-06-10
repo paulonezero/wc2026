@@ -16,8 +16,8 @@ function defaultState() {
   return {
     v: 2,
     poolName: "The Office Pool",
-    pot: 240,
-    currency: "£",
+    pot: 0,
+    currency: "€",
     phase: "lobby",
     drawDate: "2026-06-11",
     players: [],
