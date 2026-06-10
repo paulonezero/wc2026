@@ -15,7 +15,7 @@ const adminPassword = () => process.env.ADMIN_PASSWORD || "2026";
 function defaultState() {
   return {
     v: 2,
-    poolName: "The Office Pool",
+    poolName: process.env.POOL_NAME || "The Office Pool",
     pot: 0,
     currency: "€",
     phase: "lobby",
