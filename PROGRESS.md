@@ -4,6 +4,19 @@
 Ship the v1 sweepstake app in time for draw day on **2026-06-11**. The app is already deployed; ongoing work is incremental polish.
 
 ## Most recent change
+**FIFA points refreshed to the 10 Jun 2026 live ranking.**
+
+### Why
+The `fifa` field in `data.js:TEAMS` was sourced from the Nov 2025 snapshot used for the Dec 5 2025 final draw. With several friendlies and qualifying play-offs since, the ranking moved (Morocco +55, Senegal +53, Algeria +66 went up; Bosnia −83, NZL −139, Ghana −92, Haiti −59 went down — among others). Refreshed all 48 entries to current points (football-ranking.com live as of 10 Jun 2026).
+
+### Files touched
+- `sweepstake/data.js` — `TEAMS` array: every `fifa` integer updated to current points; header comment now points at the 10 Jun 2026 source instead of Nov 2025. No structural changes (codes, groups, colors, ISO flags untouched).
+
+### Impact
+- Tiered draw split (`Store.computeTiers`): tier boundaries shift since they're computed from current FIFA points. Pools that haven't run the draw yet (incl. host's pre-prepared 8-player one if it re-runs) get the refreshed split. Pools already drawn keep their committed `state.draw.order` (tier annotations are persisted, not recomputed).
+- Odds engine (`teamWinProbs`): probabilities in Standings now reflect current form/ranking, not the December snapshot.
+
+### Earlier this session
 **Real 2026 World Cup group-stage fixtures — replaced procedurally-generated 72-match schedule with the official ESPN/FIFA fixture list (17 matchdays, 11–27 Jun).**
 
 ### Why
