@@ -203,6 +203,7 @@ function Teams({ state, go }) {
 /* ========================================================================== */
 function Admin({ state, update, go }) {
   const [adminDay, setAdminDay] = useState(state.currentDay);
+  const [newName, setNewName] = useState("");
   const dayFx = fxDay(adminDay);
 
   function setScore(id, side, val) {
@@ -217,6 +218,21 @@ function Admin({ state, update, go }) {
   function clearDay() { update(s => { dayFx.forEach(f => delete s.scores[f.id]); }); }
   function toggle(code) {
     update(s => { const cur = s.teams[code].status; window.Store.setTeamStatus(s, code, cur === "alive" ? "out" : "alive"); });
+  }
+
+  function addOne() {
+    const n = newName.trim(); if (!n) return;
+    update(s => { window.Store.addPlayer(s, n); });
+    setNewName("");
+  }
+  function removeOne(id, name) {
+    if (!confirm(`Remove ${name}?`)) return;
+    update(s => window.Store.removePlayer(s, id));
+  }
+  function seedNow() { update(s => window.Store.seedPlayers(s, 12)); }
+  function clearAll() {
+    if (!confirm("Remove all players and reset the draw? Pool name, pot, currency and host code are kept.")) return;
+    update(s => window.Store.clearPlayers(s));
   }
 
   return (
@@ -250,6 +266,49 @@ function Admin({ state, update, go }) {
             </div>
           </div>
 
+          {/* players */}
+          <div className="panel">
+            <div className="row" style={{ justifyContent: "space-between" }}>
+              <div className="kept">Players · {state.players.length}</div>
+              <div className="mono muted" style={{ fontSize: 12 }}>seed, add or clear before the draw</div>
+            </div>
+
+            {state.players.length === 0
+              ? <div className="mono muted" style={{ fontSize: 12.5, padding: "14px 0", textAlign: "center" }}>
+                  No one in the pool yet — seed some test names, or share the sign-up link.
+                </div>
+              : <div style={{ marginTop: 12, display: "flex", flexWrap: "wrap", gap: 8 }}>
+                  {state.players.map(p => (
+                    <div key={p.id} className="row" style={{ gap: 6, padding: "4px 4px 4px 4px",
+                      border: "1px solid var(--line)", borderRadius: 999, background: "var(--card)" }}>
+                      <Avatar player={p} size={22} />
+                      <span className="mono" style={{ fontSize: 12.5, paddingLeft: 2 }}>{p.name}</span>
+                      <button onClick={() => removeOne(p.id, p.name)} title={`Remove ${p.name}`}
+                        style={{ border: "none", background: "transparent", cursor: "pointer", fontSize: 16,
+                          color: "var(--ink-soft)", padding: "0 6px", lineHeight: 1 }}>×</button>
+                    </div>
+                  ))}
+                </div>}
+
+            <div className="row" style={{ gap: 8, marginTop: 14 }}>
+              <input className="field" placeholder="Add a player by name…" value={newName}
+                onChange={e => setNewName(e.target.value)}
+                onKeyDown={e => e.key === "Enter" && addOne()}
+                style={{ flex: 1, minWidth: 0 }} />
+              <Btn kind="blue" size="sm" onClick={addOne} disabled={!newName.trim()}>Add</Btn>
+            </div>
+
+            <div className="row" style={{ gap: 10, marginTop: 12, flexWrap: "wrap" }}>
+              <Btn kind="gold" size="sm" onClick={seedNow}>Seed 12 demo players</Btn>
+              <Btn kind="ghost" size="sm" onClick={clearAll} disabled={state.players.length === 0}>Clear all players</Btn>
+            </div>
+
+            {state.draw.done &&
+              <div className="mono muted" style={{ fontSize: 11.5, marginTop: 12, lineHeight: 1.5 }}>
+                The draw is already done — adding or removing players won't re-deal teams. Use <b>Clear all</b> to reset and run the draw again.
+              </div>}
+          </div>
+
           {/* matchday control */}
           <div className="panel">
             <div className="kept">Matchday control</div>
@@ -278,7 +337,7 @@ function Admin({ state, update, go }) {
                 return <button key={t.code} onClick={() => toggle(t.code)} title={t.name + (out ? " (out)" : "")}
                   className="mono" style={{ border: "2px solid var(--ink)", borderRadius: 8, padding: "7px 0", cursor: "pointer",
                   fontSize: 11, fontWeight: 500, background: out ? "var(--paper-3)" : t.colors[0],
-                  color: out ? "var(--ink-faint)" : (t.ink ? "#1A1611" : "#fff"), textDecoration: out ? "line-through" : "none", opacity: out ? .7 : 1 }}>
+                  color: out ? "var(--ink-faint)" : window.SS.textOn(t.colors[0]), textDecoration: out ? "line-through" : "none", opacity: out ? .7 : 1 }}>
                   {t.code}</button>;
               })}
             </div>

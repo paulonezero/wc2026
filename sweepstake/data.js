@@ -6,72 +6,71 @@
   "use strict";
 
   /* ---- 48-team field (plausible 2026 World Cup) -------------------------- */
-  const T = (name, code, confed, fifa, c1, c2, ink) =>
-    ({ name, code, confed, fifa, colors: [c1, c2], ink: !!ink });
+  // T(name, code, confed, fifaPoints, group, c1, c2, iso)
+  const T = (name, code, confed, fifa, group, c1, c2, iso) =>
+    ({ name, code, confed, fifa, group, colors: [c1, c2], iso });
 
+  // Official 2026 FIFA World Cup field — final draw, Dec 5 2025 (groups A–L).
+  // fifa = approx FIFA points (Nov 2025 ranking order); drives the odds model.
   const TEAMS = [
-    T("Argentina","ARG","CONMEBOL",1885,"#6CB7E8","#ffffff",true),
-    T("Brazil","BRA","CONMEBOL",1790,"#FFDC00","#009C3B",true),
-    T("Uruguay","URU","CONMEBOL",1680,"#5BB0E8","#ffffff",true),
-    T("Colombia","COL","CONMEBOL",1690,"#FCD116","#0033A0",true),
-    T("Ecuador","ECU","CONMEBOL",1585,"#FFD100","#0033A0",true),
-    T("Paraguay","PAR","CONMEBOL",1500,"#DA121A","#0038A8"),
-    T("Venezuela","VEN","CONMEBOL",1480,"#CE1126","#FFCC00"),
-    T("France","FRA","UEFA",1860,"#1F3A93","#ED2939"),
-    T("Spain","ESP","UEFA",1855,"#C60B1E","#FFC400"),
-    T("England","ENG","UEFA",1820,"#ffffff","#CF142B",true),
-    T("Portugal","POR","UEFA",1775,"#006600","#FF0000"),
-    T("Netherlands","NED","UEFA",1750,"#FF6A13","#21468B"),
-    T("Belgium","BEL","UEFA",1740,"#E30613","#FDDA24"),
-    T("Italy","ITA","UEFA",1715,"#0066CC","#ffffff"),
-    T("Germany","GER","UEFA",1710,"#111111","#DD0000"),
-    T("Croatia","CRO","UEFA",1700,"#C8102E","#ffffff"),
-    T("Switzerland","SUI","UEFA",1650,"#DA291C","#ffffff"),
-    T("Denmark","DEN","UEFA",1630,"#C8102E","#ffffff"),
-    T("Austria","AUT","UEFA",1600,"#ED2939","#ffffff"),
-    T("Ukraine","UKR","UEFA",1595,"#0057B7","#FFD700"),
-    T("Serbia","SRB","UEFA",1580,"#C6363C","#0C4076"),
-    T("Turkey","TUR","UEFA",1575,"#E30A17","#ffffff"),
-    T("Norway","NOR","UEFA",1570,"#BA0C2F","#00205B"),
-    T("USA","USA","CONCACAF",1660,"#0A3161","#B31942"),
-    T("Mexico","MEX","CONCACAF",1645,"#006847","#CE1126"),
-    T("Canada","CAN","CONCACAF",1560,"#C8102E","#ffffff"),
-    T("Costa Rica","CRC","CONCACAF",1490,"#002B7F","#CE1126"),
-    T("Panama","PAN","CONCACAF",1470,"#DA121A","#005293"),
-    T("Jamaica","JAM","CONCACAF",1450,"#009B3A","#FED100",true),
-    T("Morocco","MAR","CAF",1695,"#C1272D","#006233"),
-    T("Senegal","SEN","CAF",1640,"#00853F","#FDEF42",true),
-    T("Egypt","EGY","CAF",1565,"#CE1126","#000000"),
-    T("Nigeria","NGA","CAF",1555,"#008751","#ffffff"),
-    T("Algeria","ALG","CAF",1545,"#006233","#ffffff"),
-    T("Ivory Coast","CIV","CAF",1535,"#FF8200","#009A44"),
-    T("Cameroon","CMR","CAF",1505,"#007A5E","#CE1126"),
-    T("Tunisia","TUN","CAF",1495,"#E70013","#ffffff"),
-    T("Ghana","GHA","CAF",1485,"#006B3F","#FCD116"),
-    T("Japan","JPN","AFC",1635,"#1560BD","#ffffff"),
-    T("Iran","IRN","AFC",1620,"#239F40","#DA0000"),
-    T("Korea Republic","KOR","AFC",1610,"#CD2E3A","#0047A0"),
-    T("Australia","AUS","AFC",1590,"#FFCD00","#00843D",true),
-    T("Saudi Arabia","KSA","AFC",1530,"#006C35","#ffffff"),
-    T("Qatar","QAT","AFC",1520,"#8A1538","#ffffff"),
-    T("Iraq","IRQ","AFC",1500,"#007A3D","#CE1126"),
-    T("Uzbekistan","UZB","AFC",1490,"#1EB53A","#0099B5"),
-    T("Jordan","JOR","AFC",1465,"#007A3D","#CE1126"),
-    T("New Zealand","NZL","OFC",1440,"#000000","#ffffff"),
+    // ---- CONMEBOL (6) ----
+    T("Argentina","ARG","CONMEBOL",1870,"J","#6CB7E8","#ffffff","ar"),
+    T("Brazil","BRA","CONMEBOL",1758,"C","#FFDC00","#009C3B","br"),
+    T("Uruguay","URU","CONMEBOL",1652,"H","#5BB0E8","#ffffff","uy"),
+    T("Colombia","COL","CONMEBOL",1692,"K","#FCD116","#0033A0","co"),
+    T("Ecuador","ECU","CONMEBOL",1600,"E","#FFD100","#0033A0","ec"),
+    T("Paraguay","PAR","CONMEBOL",1485,"D","#DA121A","#0038A8","py"),
+    // ---- UEFA (16) ----
+    T("Spain","ESP","UEFA",1875,"H","#C60B1E","#FFC400","es"),
+    T("France","FRA","UEFA",1860,"I","#1F3A93","#ED2939","fr"),
+    T("England","ENG","UEFA",1820,"L","#ffffff","#CF142B","gb-eng"),
+    T("Portugal","POR","UEFA",1778,"K","#006600","#FF0000","pt"),
+    T("Netherlands","NED","UEFA",1760,"F","#FF6A13","#21468B","nl"),
+    T("Belgium","BEL","UEFA",1740,"G","#E30613","#FDDA24","be"),
+    T("Germany","GER","UEFA",1725,"E","#111111","#DD0000","de"),
+    T("Croatia","CRO","UEFA",1708,"L","#C8102E","#ffffff","hr"),
+    T("Switzerland","SUI","UEFA",1648,"B","#DA291C","#ffffff","ch"),
+    T("Austria","AUT","UEFA",1592,"J","#ED2939","#ffffff","at"),
+    T("Turkey","TUR","UEFA",1585,"D","#E30A17","#ffffff","tr"),
+    T("Sweden","SWE","UEFA",1552,"F","#006AA7","#FECC02","se"),
+    T("Norway","NOR","UEFA",1535,"I","#BA0C2F","#00205B","no"),
+    T("Scotland","SCO","UEFA",1500,"C","#0A2A66","#ffffff","gb-sct"),
+    T("Czechia","CZE","UEFA",1478,"A","#11457E","#D7141A","cz"),
+    T("Bosnia & Herzegovina","BIH","UEFA",1468,"B","#002395","#FECB00","ba"),
+    // ---- CONCACAF (6) ----
+    T("USA","USA","CONCACAF",1665,"D","#0A3161","#B31942","us"),
+    T("Mexico","MEX","CONCACAF",1658,"A","#006847","#CE1126","mx"),
+    T("Canada","CAN","CONCACAF",1545,"B","#C8102E","#ffffff","ca"),
+    T("Panama","PAN","CONCACAF",1522,"L","#DA121A","#005293","pa"),
+    T("Curaçao","CUW","CONCACAF",1360,"E","#002B7F","#F9D90F","cw"),
+    T("Haiti","HAI","CONCACAF",1350,"C","#00209F","#D21034","ht"),
+    // ---- CAF (10) ----
+    T("Morocco","MAR","CAF",1700,"C","#C1272D","#006233","ma"),
+    T("Senegal","SEN","CAF",1632,"I","#00853F","#FDEF42","sn"),
+    T("Egypt","EGY","CAF",1512,"G","#CE1126","#000000","eg"),
+    T("Algeria","ALG","CAF",1505,"J","#006233","#ffffff","dz"),
+    T("Ivory Coast","CIV","CAF",1498,"E","#FF8200","#009A44","ci"),
+    T("Tunisia","TUN","CAF",1482,"F","#E70013","#ffffff","tn"),
+    T("DR Congo","COD","CAF",1452,"K","#007FFF","#F7D618","cd"),
+    T("South Africa","RSA","CAF",1445,"A","#007A4D","#FFB915","za"),
+    T("Ghana","GHA","CAF",1438,"L","#006B3F","#FCD116","gh"),
+    T("Cape Verde","CPV","CAF",1400,"H","#003893","#CF2027","cv"),
+    // ---- AFC (9) ----
+    T("Japan","JPN","AFC",1640,"F","#1560BD","#ffffff","jp"),
+    T("Iran","IRN","AFC",1620,"G","#239F40","#DA0000","ir"),
+    T("South Korea","KOR","AFC",1610,"A","#CD2E3A","#0047A0","kr"),
+    T("Australia","AUS","AFC",1578,"D","#FFCD00","#00843D","au"),
+    T("Qatar","QAT","AFC",1492,"B","#8A1538","#ffffff","qa"),
+    T("Uzbekistan","UZB","AFC",1488,"K","#1EB53A","#0099B5","uz"),
+    T("Saudi Arabia","KSA","AFC",1472,"H","#006C35","#ffffff","sa"),
+    T("Iraq","IRQ","AFC",1460,"I","#007A3D","#CE1126","iq"),
+    T("Jordan","JOR","AFC",1410,"J","#007A3D","#CE1126","jo"),
+    // ---- OFC (1) ----
+    T("New Zealand","NZL","OFC",1420,"G","#000000","#ffffff","nz"),
   ];
 
-  /* ---- group assignment: snake-seed by ranking into 12 groups A–L ------- */
+  /* ---- 12 groups A–L (official 2026 draw; set per team above) ----------- */
   const GROUP_LETTERS = "ABCDEFGHIJKL".split("");
-  (function assignGroups() {
-    const sorted = [...TEAMS].sort((a, b) => b.fifa - a.fifa);
-    sorted.forEach((t, i) => {
-      const band = Math.floor(i / 12);
-      const idx = i % 12;
-      const g = band % 2 === 0 ? idx : 11 - idx;
-      t.group = GROUP_LETTERS[g];
-      t.seed = band + 1;
-    });
-  })();
 
   const CONFED_LABEL = {
     UEFA: "UEFA", CONMEBOL: "CONMEBOL", CONCACAF: "CONCACAF",
@@ -80,19 +79,9 @@
   const byCode = {}; TEAMS.forEach(t => byCode[t.code] = t);
   function teamByCode(code) { return byCode[code]; }
 
-  /* ---- ISO codes for real flags (flagcdn.com) --------------------------- */
-  const ISO = {
-    ARG:"ar", BRA:"br", URU:"uy", COL:"co", ECU:"ec", PAR:"py", VEN:"ve",
-    FRA:"fr", ESP:"es", ENG:"gb-eng", POR:"pt", NED:"nl", BEL:"be", ITA:"it",
-    GER:"de", CRO:"hr", SUI:"ch", DEN:"dk", AUT:"at", UKR:"ua", SRB:"rs",
-    TUR:"tr", NOR:"no", USA:"us", MEX:"mx", CAN:"ca", CRC:"cr", PAN:"pa",
-    JAM:"jm", MAR:"ma", SEN:"sn", EGY:"eg", NGA:"ng", ALG:"dz", CIV:"ci",
-    CMR:"cm", TUN:"tn", GHA:"gh", JPN:"jp", IRN:"ir", KOR:"kr", AUS:"au",
-    KSA:"sa", QAT:"qa", IRQ:"iq", UZB:"uz", JOR:"jo", NZL:"nz",
-  };
-  TEAMS.forEach(t => t.iso = ISO[t.code]);
+  /* ---- real flags via flagcdn.com (ISO set per team above) -------------- */
   function flagURL(team, w = 160) {
-    const iso = typeof team === "string" ? ISO[team] : team.iso;
+    const iso = typeof team === "string" ? byCode[team].iso : team.iso;
     return `https://flagcdn.com/w${w}/${iso}.png`;
   }
 
@@ -223,10 +212,32 @@
 
   /* ---- helpers ---------------------------------------------------------- */
   function fmtPct(x) { return (x * 100).toFixed(x < 0.0095 ? 1 : x < 0.1 ? 1 : 0) + "%"; }
+  // readable text color over a solid hex background
+  function textOn(hex) {
+    const h = (hex || "#000").replace("#", "");
+    const r = parseInt(h.slice(0, 2), 16), g = parseInt(h.slice(2, 4), 16), b = parseInt(h.slice(4, 6), 16);
+    const lum = (0.299 * r + 0.587 * g + 0.114 * b) / 255;
+    return lum > 0.62 ? "#11181C" : "#ffffff";
+  }
   function splitCounts(n) {
     if (!n) return [];
     const base = Math.floor(TEAMS.length / n), extra = TEAMS.length % n;
     return Array.from({ length: n }, (_, i) => base + (i < extra ? 1 : 0));
+  }
+
+  /* ---- tier naming for the draw ----------------------------------------- */
+  function tierLabel(tier, total) {
+    if (!total || total <= 1) return "All teams";
+    if (tier === 1) return "Bottom tier";
+    if (tier === total) return "Top tier";
+    if (total === 3 && tier === 2) return "Middle tier";
+    return `Tier ${tier}`;
+  }
+  function tierSubtitle(tier, total) {
+    if (!total) return null;
+    if (tier === 1) return "Weakest by FIFA ranking";
+    if (tier === total) return "Strongest by FIFA ranking";
+    return null;
   }
 
   window.SS = {
@@ -234,6 +245,7 @@
     FIXTURES, KICKS, TOURNAMENT_START, TOTAL_DAYS,
     dateForDay, fmtDate, fixturesOnDay, mockScore,
     formMap, formDelta, isAlive, teamWinProbs, playerWinProbs,
-    teamsOfPlayer, ownerOf, aliveCount, teamByCode, fmtPct, splitCounts, flagURL,
+    teamsOfPlayer, ownerOf, aliveCount, teamByCode, fmtPct, splitCounts, flagURL, textOn,
+    tierLabel, tierSubtitle,
   };
 })();

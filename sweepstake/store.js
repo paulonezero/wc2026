@@ -69,14 +69,37 @@
     }
     return a;
   }
+  // Build tiers by FIFA ranking. Bottom tier (index 0) = weakest n teams,
+  // top tier (last index) = strongest. If 48 doesn't divide cleanly, the
+  // top tier is the short one — a few players miss out on a top-tier team.
+  function computeTiers(state) {
+    const n = state.players.length;
+    if (n === 0) return { tiers: [], numTiers: 0, teamsPerPlayer: 0 };
+    const numTiers = Math.ceil(TEAMS.length / n);
+    const sorted = [...TEAMS].sort((a, b) => a.fifa - b.fifa); // weakest first
+    const tiers = [];
+    let i = 0;
+    for (let t = 0; t < numTiers; t++) {
+      const take = (t < numTiers - 1) ? n : (TEAMS.length - i);
+      tiers.push(sorted.slice(i, i + take).map(team => team.code));
+      i += take;
+    }
+    return { tiers, numTiers, teamsPerPlayer: numTiers };
+  }
   function computeDraw(state) {
-    const players = state.players, n = players.length;
-    const codes = shuffle(TEAMS.map(t => t.code));
+    const players = state.players;
+    const { tiers } = computeTiers(state);
     const assignments = {}, order = [];
-    codes.forEach((code, i) => {
-      const p = players[i % n];
-      assignments[code] = p.id;
-      order.push({ code, playerId: p.id });
+    tiers.forEach((tierTeams, tIdx) => {
+      const tier = tIdx + 1;                              // 1-based, bottom-up
+      const tierTotal = tiers.length;
+      const shuffledTeams = shuffle(tierTeams);
+      const shuffledPlayers = shuffle(players);
+      shuffledTeams.forEach((code, k) => {
+        const p = shuffledPlayers[k];                     // top tier may be short — extra players sit out
+        assignments[code] = p.id;
+        order.push({ code, playerId: p.id, tier, tierTotal });
+      });
     });
     return { assignments, order };
   }
@@ -117,9 +140,36 @@
 
   function reset() { try { localStorage.removeItem(KEY); } catch (e) {} }
 
+  /* ---- admin tools: seed fake players, clear back to lobby -------------- */
+  // adds up to `n` demo names that aren't already in the pool. idempotent.
+  function seedPlayers(state, n) {
+    const want = Math.max(1, Math.min(DEMO_NAMES.length, n || 12));
+    const taken = new Set(state.players.map(p => p.name.toLowerCase()));
+    let added = 0;
+    for (const name of DEMO_NAMES) {
+      if (added >= want) break;
+      if (taken.has(name.toLowerCase())) continue;
+      addPlayer(state, name);
+      added++;
+    }
+    return added;
+  }
+  // wipe players + draw + teams + scores back to lobby; preserve pool config.
+  function clearPlayers(state) {
+    state.players = [];
+    state.me = null;
+    state.draw = { done: false, assignments: {}, order: [] };
+    state.phase = "lobby";
+    state.teams = freshTeams();
+    state.scores = {};
+    state.currentDay = 1;
+    return state;
+  }
+
   window.Store = {
     KEY, AVA, defaultState, load, save, freshTeams,
-    addPlayer, signUp, removePlayer, computeDraw, commitDraw,
+    addPlayer, signUp, removePlayer, computeDraw, computeTiers, commitDraw,
     recordFixtureScore, advanceDay, setTeamStatus, demoState, reset, shuffle,
+    seedPlayers, clearPlayers,
   };
 })();

@@ -2,7 +2,8 @@
    SCREENS · 1 — Sign Up, Today, Draw
    ========================================================================== */
 const { TEAMS: TM, GROUP_LETTERS, fixturesOnDay, fmtDate, dateForDay, fmtPct: pct,
-        ownerOf, teamByCode, teamsOfPlayer, splitCounts, TOTAL_DAYS } = window.SS;
+        ownerOf, teamByCode, teamsOfPlayer, splitCounts, TOTAL_DAYS,
+        tierLabel, tierSubtitle } = window.SS;
 
 /* ========================================================================== */
 /*  CHEAT MODAL — the joke overlay for the "Donate to Paul's Revolut" button  */
@@ -301,14 +302,31 @@ function Today({ state, go }) {
 /* ========================================================================== */
 /*  THE DRAW — admin-run animated reveal (screen-shared)                      */
 /* ========================================================================== */
+const DRAW_SPEEDS = [
+  { key: "relaxed", label: "Relaxed", mult: 1.45 },
+  { key: "normal",  label: "Normal",  mult: 1.0 },
+  { key: "quick",   label: "Quick",   mult: 0.62 },
+];
+// base stage durations (ms): tier announce -> pull team from pot -> reveal team -> spin names -> land
+const STAGE_MS = { intro: 700, "tier-intro": 1900, pull: 1100, team: 1400, spin: 1500, land: 1150 };
+
 function Draw({ state, update, go }) {
   const ready = state.players.length >= 2;
   const [phase, setPhase] = useState(state.draw.done ? "done" : "idle");
   const [order, setOrder] = useState([]);
   const [idx, setIdx] = useState(-1);
+  const [sub, setSub] = useState("pull");        // tier-intro | pull | team | spin | land
   const [auto, setAuto] = useState(true);
+  const [speed, setSpeed] = useState(1.0);
+  const [reel, setReel] = useState(null);         // player cycled during name spin
   const [piles, setPiles] = useState({});
   const stash = useRef(null);
+  const tRef = useRef(null);
+  const reelRef = useRef(null);
+
+  // tier preview for the idle phase (recomputes if player count changes)
+  const preview = useMemo(() => ready ? window.Store.computeTiers(state) : null,
+                          [ready, state.players.length]);
 
   useEffect(() => {
     if (state.draw.done) {
@@ -316,44 +334,94 @@ function Draw({ state, update, go }) {
       state.draw.order.forEach(o => { (p[o.playerId] = p[o.playerId] || []).push(o.code); });
       setPiles(p); setPhase("done"); setIdx(state.draw.order.length);
     }
+    return () => { clearTimeout(tRef.current); clearInterval(reelRef.current); };
   }, []);
+
+  const dur = (k) => STAGE_MS[k] * speed;
 
   function start() {
     const { assignments, order: ord } = window.Store.computeDraw(state);
     setOrder(ord);
     const p = {}; state.players.forEach(pl => p[pl.id] = []);
-    setPiles(p); setIdx(-1); setPhase("running"); setAuto(true);
+    setPiles(p); setIdx(-1); setSub("pull"); setReel(null); setPhase("running"); setAuto(true);
     stash.current = { assignments, order: ord };
   }
-  function step() {
-    setIdx(i => {
-      const ni = i + 1; if (ni >= order.length) return i;
-      const o = order[ni];
-      setPiles(pl => ({ ...pl, [o.playerId]: [...(pl[o.playerId] || []), o.code] }));
-      return ni;
-    });
+
+  function commitPile(pick) {
+    setPiles(pl => ({ ...pl, [pick.playerId]: [...(pl[pick.playerId] || []), pick.code] }));
   }
+
+  // advance exactly one stage — used by both the auto-timer and the manual button
+  function advance() {
+    if (idx < 0) { setIdx(0); setSub("tier-intro"); return; }
+    const pick = order[idx];
+    if (sub === "tier-intro") setSub("pull");
+    else if (sub === "pull") setSub("team");
+    else if (sub === "team") setSub("spin");
+    else if (sub === "spin") { commitPile(pick); setReel(state.players.find(p => p.id === pick.playerId)); setSub("land"); }
+    else if (sub === "land") {
+      if (idx >= order.length - 1) finish();
+      else {
+        const next = order[idx + 1];
+        setIdx(idx + 1);
+        setSub(next.tier !== pick.tier ? "tier-intro" : "pull");
+      }
+    }
+  }
+
+  // auto stage machine
   useEffect(() => {
     if (phase !== "running" || !auto) return;
-    if (idx >= order.length - 1) { const t = setTimeout(finish, 700); return () => clearTimeout(t); }
-    const t = setTimeout(step, idx < 0 ? 400 : 520);
-    return () => clearTimeout(t);
-  }, [phase, auto, idx, order]);
+    clearTimeout(tRef.current);
+    const k = idx < 0 ? "intro" : sub;
+    tRef.current = setTimeout(advance, dur(k));
+    return () => clearTimeout(tRef.current);
+  }, [phase, auto, idx, sub, order, speed]);
+
+  // name slot-machine cycling during the spin beat
+  useEffect(() => {
+    clearInterval(reelRef.current);
+    if (phase === "running" && sub === "spin" && idx >= 0) {
+      reelRef.current = setInterval(() => {
+        const ps = state.players;
+        setReel(ps[Math.floor(Math.random() * ps.length)]);
+      }, 75);
+      return () => clearInterval(reelRef.current);
+    }
+  }, [phase, sub, idx]);
 
   function finish() {
+    clearTimeout(tRef.current); clearInterval(reelRef.current);
     update(s => { s.draw = { done: true, assignments: stash.current.assignments, order: stash.current.order }; s.phase = "drawn"; });
-    setPhase("done"); fireConfetti(70);
+    setPhase("done"); fireConfetti(110);
   }
   function skip() {
-    setAuto(false); setIdx(order.length - 1);
+    clearTimeout(tRef.current); clearInterval(reelRef.current);
+    setAuto(false);
     const p = {}; state.players.forEach(pl => p[pl.id] = []);
-    order.forEach(o => p[o.playerId].push(o.code)); setPiles(p); setTimeout(finish, 150);
+    order.forEach(o => p[o.playerId].push(o.code)); setPiles(p);
+    setIdx(order.length); setTimeout(finish, 150);
   }
 
-  const current = idx >= 0 && idx < order.length ? order[idx] : null;
-  const curTeam = current ? teamByCode(current.code) : null;
-  const curPlayer = current ? state.players.find(p => p.id === current.playerId) : null;
-  const progress = order.length ? (idx + 1) / order.length : 0;
+  const pick = idx >= 0 && idx < order.length ? order[idx] : null;
+  const curTeam = pick ? teamByCode(pick.code) : null;
+  const curPlayer = pick ? state.players.find(p => p.id === pick.playerId) : null;
+  const done = idx >= 0 ? idx + (sub === "land" ? 1 : 0) : 0;
+  const progress = order.length ? done / order.length : 0;
+  // teams still "in the pot" — current team leaves the pot the moment it's pulled
+  const consumed = idx < 0 ? 0 : (sub === "tier-intro" || sub === "pull" ? idx : idx + 1);
+
+  // current-tier remaining: which teams in this tier are still to come, who still needs one
+  const tier = pick?.tier || 0;
+  const tierTotal = pick?.tierTotal || 0;
+  const tierEntries = tier ? order.filter(o => o.tier === tier) : [];
+  const receivedThisTier = tier
+    ? order.slice(0, idx + (sub === "land" ? 1 : 0)).filter(o => o.tier === tier)
+    : [];
+  const receivedIds = new Set(receivedThisTier.map(o => o.playerId));
+  const tierPotCodes = tier
+    ? order.slice(consumed).filter(o => o.tier === tier).map(o => o.code)
+    : order.slice(consumed).map(o => o.code);
 
   if (!ready && !state.draw.done)
     return <div className="fadein"><Empty title="Not enough players yet">
@@ -361,55 +429,188 @@ function Draw({ state, update, go }) {
       <div style={{ marginTop: 18 }}><Btn kind="primary" onClick={() => go("admin")}>Back to Admin</Btn></div>
     </Empty></div>;
 
+  const beatLabel = idx < 0 ? "Shuffling the pot…"
+    : sub === "tier-intro" ? "Up next…"
+    : sub === "pull" ? "Reaching into the pot…"
+    : sub === "team" ? "Out comes…"
+    : sub === "spin" ? "And it goes to…"
+    : "Drawn!";
+
   return (
     <div className="fadein">
       <div className="row" style={{ justifyContent: "space-between", flexWrap: "wrap", gap: 12, marginBottom: 18 }}>
         <div>
-          <div className="display" style={{ fontSize: "clamp(26px,5.5vw,34px)", textTransform: "uppercase" }}>The Draw</div>
-          <div className="muted" style={{ fontSize: 14 }}>48 teams · {state.players.length} players · dealt at random, one at a time</div>
+          <div className="display" style={{ fontSize: 34, textTransform: "uppercase" }}>The Draw</div>
+          <div className="muted" style={{ fontSize: 14 }}>
+            {order.length || 48} teams · {state.players.length} players
+            {preview ? ` · ${preview.numTiers} tier${preview.numTiers !== 1 ? "s" : ""} by FIFA rank, bottom-up` : ""}
+          </div>
         </div>
         <div className="row" style={{ gap: 8 }}>
-          {phase === "idle" && <Btn kind="primary" size="lg" onClick={start}>Run the draw</Btn>}
+          {phase === "idle" && <>
+            <div className="seg">
+              {DRAW_SPEEDS.map(s => (
+                <button key={s.key} className={"seg-b" + (speed === s.mult ? " on" : "")} onClick={() => setSpeed(s.mult)}>{s.label}</button>
+              ))}
+            </div>
+            <Btn kind="primary" size="lg" onClick={start}>Run the draw</Btn>
+          </>}
           {phase === "running" && <>
+            <div className="seg">
+              {DRAW_SPEEDS.map(s => (
+                <button key={s.key} className={"seg-b" + (speed === s.mult ? " on" : "")} onClick={() => setSpeed(s.mult)}>{s.label}</button>
+              ))}
+            </div>
             <Btn kind="ghost" onClick={() => setAuto(a => !a)}>{auto ? "Pause" : "Play"}</Btn>
-            {!auto && <Btn kind="blue" onClick={step} disabled={idx >= order.length - 1}>Reveal next →</Btn>}
-            <Btn kind="ghost" onClick={skip}>Skip</Btn>
+            {!auto && <Btn kind="blue" onClick={advance}>Next →</Btn>}
+            <Btn kind="ghost" onClick={skip}>Skip all</Btn>
           </>}
           {phase === "done" && <Btn kind="lime" onClick={() => go("today")}>Done → Today</Btn>}
         </div>
       </div>
 
       {phase !== "done" &&
-        <div className="card center" style={{ height: 290, marginBottom: 20, position: "relative", overflow: "hidden", background: "var(--ink)" }}>
+        <div className="card drawstage" style={{ marginBottom: 20 }}>
           <div className="stage-dots"></div>
+
           {phase === "idle" &&
-            <div style={{ textAlign: "center", color: "var(--paper)", zIndex: 2 }}>
-              <div className="display" style={{ fontSize: 42, textTransform: "uppercase" }}>Ready when you are</div>
-              <div style={{ color: "#C9C0AE", marginTop: 6 }}>Share your screen and hit “Run the draw”.</div>
-            </div>}
-          {phase === "running" && curTeam &&
-            <div key={idx} className="reveal-pop" style={{ textAlign: "center", zIndex: 2 }}>
-              <div style={{ width: 168, margin: "0 auto" }}><Sticker team={curTeam} hover={false} /></div>
-              <div className="mono" style={{ color: "var(--lime)", marginTop: 12, fontSize: 13, letterSpacing: ".14em" }}>→ DEALT TO</div>
-              <div className="row center" style={{ gap: 9, marginTop: 6 }}>
-                <Avatar player={curPlayer} size={30} />
-                <span className="display" style={{ color: "var(--paper)", fontSize: 26, textTransform: "uppercase" }}>{curPlayer.name}</span>
+            <div className="stage-inner" style={{ zIndex: 2, position: "relative", color: "var(--paper)" }}>
+              <div className="pot-emoji">⚽</div>
+              <div className="display" style={{ fontSize: 36, textTransform: "uppercase", textAlign: "center" }}>Ready when you are</div>
+              <div style={{ color: "#C9C0AE", marginTop: 4, textAlign: "center", maxWidth: 480 }}>
+                Teams are sorted by FIFA ranking into {preview?.numTiers || 0} tiers.
+                Draw starts at the <b style={{ color: "#fff" }}>bottom</b> — every player picks one — and works up to the <b style={{ color: "var(--gold)" }}>top tier</b> last.
               </div>
+
+              {/* tier preview: top at top, bottom at bottom, so the visual maps to "best on top" */}
+              {preview && preview.tiers.length > 0 &&
+                <div className="tier-preview">
+                  {preview.tiers.slice().reverse().map((codes, revIdx) => {
+                    const tnum = preview.tiers.length - revIdx;
+                    const isTop = tnum === preview.numTiers;
+                    const isBot = tnum === 1;
+                    const cls = "tier-preview-row" + (isTop ? " top" : "") + (isBot ? " bottom" : "");
+                    const subt = tierSubtitle(tnum, preview.numTiers);
+                    return (
+                      <div key={tnum} className={cls}>
+                        <div className="tier-preview-label">
+                          {tierLabel(tnum, preview.numTiers)}
+                          <span className="small">Tier {tnum} of {preview.numTiers}{subt ? " · " + subt : ""}</span>
+                        </div>
+                        <div className="tier-preview-flags">
+                          {codes.map(c => (
+                            <span key={c} className="drum-flag" title={teamByCode(c).name}>
+                              <img src={window.SS.flagURL(teamByCode(c), 40)} alt={teamByCode(c).name} />
+                            </span>
+                          ))}
+                        </div>
+                        <div className="tier-preview-count">{codes.length} team{codes.length !== 1 ? "s" : ""}</div>
+                      </div>
+                    );
+                  })}
+                </div>}
             </div>}
+
           {phase === "running" &&
-            <div style={{ position: "absolute", bottom: 14, left: 24, right: 24, zIndex: 2 }}>
-              <div className="bar" style={{ background: "rgba(255,255,255,.12)" }}>
-                <i style={{ width: progress * 100 + "%", background: "var(--lime)" }}></i>
+            <div className="stage-inner" style={{ zIndex: 2, position: "relative" }}>
+              <div className="mono beat-label">{beatLabel}</div>
+
+              {/* tier banner — visible from idx 0 onwards */}
+              {tier > 0 &&
+                <div className={"tier-banner" + (tier === tierTotal ? " top" : "") + (tier === 1 ? " bottom" : "")}>
+                  <span className="tier-tag">{tierLabel(tier, tierTotal)}</span>
+                  <span className="tier-num">Tier {tier} of {tierTotal}</span>
+                </div>}
+
+              {/* tier intro splash — flags of the about-to-be-drawn tier */}
+              {sub === "tier-intro" && tier > 0 &&
+                <div className="tier-intro fadein">
+                  <div className="display tier-intro-title">{tierLabel(tier, tierTotal).toUpperCase()}</div>
+                  {tierSubtitle(tier, tierTotal) &&
+                    <div className="mono tier-intro-sub">{tierSubtitle(tier, tierTotal)}</div>}
+                  <div className="tier-intro-flags">
+                    {tierEntries.map(o => (
+                      <span key={o.code} className="drum-flag" title={teamByCode(o.code).name}>
+                        <img src={window.SS.flagURL(teamByCode(o.code), 40)} alt="" />
+                      </span>
+                    ))}
+                  </div>
+                  <div className="mono tier-intro-meta">{tierEntries.length} team{tierEntries.length !== 1 ? "s" : ""} · one for each player</div>
+                </div>}
+
+              {/* the pot of remaining flags in THIS tier */}
+              {sub !== "tier-intro" && (idx < 0 || sub === "pull") &&
+                <div className={"drum" + (sub === "pull" || idx < 0 ? " shake" : "")}>
+                  {tierPotCodes.slice(0, 24).map(c => (
+                    <span key={c} className="drum-flag"><img src={window.SS.flagURL(teamByCode(c), 40)} alt="" /></span>
+                  ))}
+                  <div className="drum-count">
+                    {idx < 0
+                      ? `${order.length} teams · ${tierTotal || preview?.numTiers || 0} tiers`
+                      : `${tierPotCodes.length} left in this tier`}
+                  </div>
+                </div>}
+
+              {/* the team that came out */}
+              {curTeam && (sub === "team" || sub === "spin" || sub === "land") &&
+                <div className={"draw-team" + (sub === "team" ? " big reveal-pop" : "")}>
+                  <div style={{ width: sub === "team" ? 188 : 132, transition: "width .4s ease", margin: "0 auto" }}>
+                    <Sticker team={curTeam} hover={false} />
+                  </div>
+                </div>}
+
+              {/* the name spin / landing */}
+              {(sub === "spin" || sub === "land") &&
+                <div className="namebox">
+                  <div className="mono" style={{ color: "var(--lime)", fontSize: 12, letterSpacing: ".16em", marginBottom: 6 }}>
+                    {sub === "land" ? "WINS THE STICKER" : "PULLING A NAME"}
+                  </div>
+                  <div className={"name-reel" + (sub === "land" ? " land" : " spin")}>
+                    <Avatar player={sub === "land" ? curPlayer : reel} size={sub === "land" ? 40 : 32} />
+                    <span className="display" style={{ color: "#fff", fontSize: sub === "land" ? 34 : 26, textTransform: "uppercase" }}>
+                      {(sub === "land" ? curPlayer : reel)?.name || "…"}
+                    </span>
+                  </div>
+                </div>}
+
+              {/* players still to receive in this tier */}
+              {tier > 0 && sub !== "tier-intro" &&
+                <div className="tier-players">
+                  <div className="mono tier-players-label">
+                    {tierEntries.length - receivedThisTier.length} of {tierEntries.length} player{tierEntries.length !== 1 ? "s" : ""} still to draw this tier
+                  </div>
+                  <div className="tier-players-row">
+                    {tierEntries.map(o => {
+                      const p = state.players.find(pl => pl.id === o.playerId);
+                      const got = receivedIds.has(o.playerId);
+                      const isCurrent = pick && pick.playerId === o.playerId
+                        && (sub === "spin" || sub === "land")
+                        && !got;
+                      return (
+                        <div key={o.code} className={"tier-player" + (got ? " got" : "") + (isCurrent ? " on" : "")} title={p?.name}>
+                          <Avatar player={p} size={26} />
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>}
+
+              {/* progress */}
+              <div className="draw-progress">
+                <div className="bar" style={{ background: "rgba(255,255,255,.12)" }}>
+                  <i style={{ width: progress * 100 + "%", background: "var(--lime)" }}></i>
+                </div>
+                <div className="mono" style={{ color: "#C9C0AE", fontSize: 11, marginTop: 6, textAlign: "right" }}>{done} / {order.length} teams drawn</div>
               </div>
-              <div className="mono" style={{ color: "#C9C0AE", fontSize: 11, marginTop: 6, textAlign: "right" }}>{idx + 1} / {order.length} teams dealt</div>
             </div>}
         </div>}
 
       <div className="pile-grid">
         {state.players.map(p => {
           const mine = piles[p.id] || [];
+          const justGot = phase === "running" && sub === "land" && pick && pick.playerId === p.id;
           return (
-            <div key={p.id} className="panel" style={{ padding: 14 }}>
+            <div key={p.id} className={"panel" + (justGot ? " pile-hit" : "")} style={{ padding: 14 }}>
               <div className="row" style={{ gap: 10, marginBottom: 10 }}>
                 <Avatar player={p} size={32} />
                 <div style={{ flex: 1 }}>

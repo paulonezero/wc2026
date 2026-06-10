@@ -202,3 +202,104 @@ label.lbl{font-family:"DM Mono",monospace;font-size:10.5px;letter-spacing:.14em;
 .confed-row{display:flex;align-items:center;gap:7px;flex-wrap:wrap;margin:14px 0 22px}
 .hero{padding:44px 44px 40px}
 .search-row{display:flex;gap:8px;align-items:center}
+/* ============================================================================
+   MERGE SNIPPET — CSS for the new two-beat raffle Draw.
+   APPEND this block to sweepstake/styles.css (anywhere; end of file is fine).
+   All class names are new (draw stage / drum / name-reel / seg / pile-hit),
+   so there are no conflicts with existing rules.
+   ============================================================================ */
+
+/* ---- draw stage ------------------------------------------------------- */
+.drawstage{position:relative;overflow:hidden;background:var(--navy);min-height:340px;
+  display:flex;align-items:center;justify-content:center;padding:26px}
+.stage-inner{width:100%;max-width:560px;text-align:center;display:flex;flex-direction:column;align-items:center;gap:14px}
+.beat-label{color:#C9C0AE;font-size:12px;letter-spacing:.22em;text-transform:uppercase}
+.pot-emoji{font-size:46px;margin-bottom:8px;animation:bob 2s ease-in-out infinite}
+@keyframes bob{0%,100%{transform:translateY(0)}50%{transform:translateY(-7px)}}
+
+/* the pot/drum of remaining flags */
+.drum{position:relative;display:flex;flex-wrap:wrap;gap:5px;justify-content:center;align-items:center;
+  max-width:430px;padding:18px 18px 30px;border-radius:18px;border:1px solid rgba(255,255,255,.14);
+  background:rgba(255,255,255,.04)}
+.drum.shake{animation:shake .5s ease-in-out infinite}
+@keyframes shake{0%,100%{transform:translateX(0) rotate(0)}25%{transform:translateX(-3px) rotate(-.6deg)}75%{transform:translateX(3px) rotate(.6deg)}}
+.drum-flag{width:30px;height:21px;border-radius:4px;overflow:hidden;border:1px solid rgba(255,255,255,.25);box-shadow:0 2px 5px rgba(0,0,0,.3)}
+.drum-flag img{width:100%;height:100%;object-fit:cover;display:block}
+.drum-count{position:absolute;bottom:-11px;left:50%;transform:translateX(-50%);background:var(--navy);
+  border:1px solid rgba(255,255,255,.18);border-radius:999px;padding:3px 12px;
+  font-family:"DM Mono",monospace;font-size:10.5px;color:#C9C0AE;letter-spacing:.08em;white-space:nowrap}
+
+/* team that came out of the pot */
+.draw-team{margin-top:2px}
+
+/* name reel */
+.namebox{margin-top:2px}
+.name-reel{display:inline-flex;align-items:center;gap:11px;padding:10px 22px;border-radius:14px;
+  border:1px solid rgba(255,255,255,.16);background:rgba(255,255,255,.05);min-width:240px;justify-content:center}
+.name-reel.spin{filter:blur(.3px)}
+.name-reel.land{border-color:var(--lime);background:rgba(39,192,110,.16);animation:lockin .4s cubic-bezier(.2,1.3,.4,1)}
+@keyframes lockin{0%{transform:scale(.86)}55%{transform:scale(1.07)}100%{transform:scale(1)}}
+
+.draw-progress{width:100%;max-width:430px;margin-top:6px}
+
+/* segmented speed control */
+.seg{display:inline-flex;border:1px solid var(--line);border-radius:10px;overflow:hidden;background:var(--card)}
+.seg-b{border:none;background:transparent;font-family:"Archivo";font-weight:700;font-size:12px;text-transform:uppercase;
+  letter-spacing:.04em;color:var(--ink-soft);padding:11px 13px;cursor:pointer;transition:.12s}
+.seg-b:not(:last-child){border-right:1px solid var(--line)}
+.seg-b.on{background:var(--navy);color:#fff}
+
+/* pile flash when a player wins a team */
+.pile-hit{animation:pilehit .7s ease}
+@keyframes pilehit{0%{box-shadow:0 0 0 0 rgba(39,192,110,.5)}100%{box-shadow:0 0 0 14px rgba(39,192,110,0)}}
+
+/* ---- tier draw: banner, intro splash, players-this-tier, preview --------- */
+.tier-banner{display:inline-flex;gap:10px;align-items:center;padding:5px 14px;border-radius:999px;
+  background:rgba(255,255,255,.07);border:1px solid rgba(255,255,255,.18);margin-top:-4px}
+.tier-banner.top{background:rgba(201,154,63,.22);border-color:var(--gold)}
+.tier-banner.bottom{background:rgba(255,255,255,.04);border-color:rgba(255,255,255,.14)}
+.tier-tag{font-family:"Archivo";font-weight:800;font-size:13px;color:#fff;
+  text-transform:uppercase;letter-spacing:.1em}
+.tier-banner.top .tier-tag{color:var(--gold)}
+.tier-num{font-family:"DM Mono",monospace;font-size:10.5px;color:#C9C0AE;letter-spacing:.1em;text-transform:uppercase}
+
+/* tier intro splash */
+.tier-intro{text-align:center;display:flex;flex-direction:column;gap:10px;align-items:center;padding:8px 0}
+.tier-intro-title{color:#fff;font-size:clamp(28px,5vw,42px);letter-spacing:.04em;text-transform:uppercase;line-height:1}
+.tier-intro-sub{color:var(--lime);font-size:12px;letter-spacing:.18em;text-transform:uppercase;margin-top:-2px}
+.tier-intro-flags{display:flex;flex-wrap:wrap;gap:5px;justify-content:center;max-width:460px;
+  padding:14px 16px;border-radius:14px;background:rgba(255,255,255,.05);border:1px solid rgba(255,255,255,.12)}
+.tier-intro-meta{color:#C9C0AE;font-size:11px;letter-spacing:.12em;text-transform:uppercase}
+
+/* players still to receive this tier */
+.tier-players{display:flex;flex-direction:column;gap:6px;align-items:center;margin-top:2px}
+.tier-players-label{color:#C9C0AE;font-size:10.5px;letter-spacing:.14em;text-transform:uppercase}
+.tier-players-row{display:flex;flex-wrap:wrap;gap:8px;justify-content:center;max-width:480px}
+.tier-player{position:relative;padding:2px;border-radius:50%;transition:opacity .25s ease,filter .25s ease,box-shadow .25s ease}
+.tier-player.got{opacity:.3;filter:grayscale(80%)}
+.tier-player.got::after{content:"✓";position:absolute;right:-3px;bottom:-3px;
+  background:var(--lime);color:var(--ink);width:14px;height:14px;border-radius:50%;
+  font-size:10px;font-weight:800;display:flex;align-items:center;justify-content:center;
+  border:2px solid var(--navy);line-height:1}
+.tier-player.on{box-shadow:0 0 0 3px var(--gold);animation:tierpulse 1s ease infinite}
+@keyframes tierpulse{0%,100%{box-shadow:0 0 0 3px var(--gold)}50%{box-shadow:0 0 0 6px var(--pop)}}
+
+/* idle tier preview */
+.tier-preview{display:grid;gap:8px;width:100%;max-width:620px;margin-top:18px}
+.tier-preview-row{display:grid;grid-template-columns:minmax(140px,180px) 1fr auto;align-items:center;
+  gap:14px;padding:10px 14px;background:rgba(255,255,255,.05);
+  border:1px solid rgba(255,255,255,.12);border-radius:14px}
+.tier-preview-row.top{background:rgba(201,154,63,.16);border-color:var(--gold)}
+.tier-preview-row.bottom{background:rgba(255,255,255,.03);border-color:rgba(255,255,255,.08)}
+.tier-preview-label{font-family:"Archivo";font-weight:800;text-transform:uppercase;font-size:14px;
+  color:#fff;line-height:1.15;text-align:left}
+.tier-preview-row.top .tier-preview-label{color:var(--gold)}
+.tier-preview-label .small{display:block;font-family:"DM Mono",monospace;font-size:10.5px;color:#C9C0AE;
+  font-weight:500;letter-spacing:.06em;margin-top:4px;text-transform:none}
+.tier-preview-flags{display:flex;flex-wrap:wrap;gap:3px}
+.tier-preview-flags .drum-flag{width:22px;height:15px}
+.tier-preview-count{font-family:"DM Mono",monospace;font-size:11px;color:var(--lime);white-space:nowrap}
+@media (max-width:640px){
+  .tier-preview-row{grid-template-columns:1fr;gap:8px}
+  .tier-preview-count{justify-self:start}
+}
