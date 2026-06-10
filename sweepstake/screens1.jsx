@@ -309,6 +309,15 @@ const DRAW_SPEEDS = [
 ];
 // base stage durations (ms): tier announce -> pull team from pot -> reveal team -> spin names -> land
 const STAGE_MS = { intro: 700, "tier-intro": 1900, pull: 1100, team: 1400, spin: 1500, land: 1150 };
+// tongue-in-cheek "system" messages shown while the names spin
+const DRAW_QUIPS = [
+  "Accounting for Revolut donations…",
+  "Making sure Engineering get a good outcome…",
+  "Applying the office-politics modifier…",
+  "Running the results through Data Bridge…",
+  "Pretending this isn't rigged…",
+  "Pretending Ireland qualified…",
+];
 
 function Draw({ state, update, go }) {
   const ready = state.players.length >= 2;
@@ -319,6 +328,7 @@ function Draw({ state, update, go }) {
   const [auto, setAuto] = useState(true);
   const [speed, setSpeed] = useState(1.0);
   const [reel, setReel] = useState(null);         // player cycled during name spin
+  const [quip, setQuip] = useState("");           // jokey message during the spin
   const [piles, setPiles] = useState({});
   const stash = useRef(null);
   const tRef = useRef(null);
@@ -357,7 +367,7 @@ function Draw({ state, update, go }) {
     const pick = order[idx];
     if (sub === "tier-intro") setSub("pull");
     else if (sub === "pull") setSub("team");
-    else if (sub === "team") setSub("spin");
+    else if (sub === "team") { setQuip(DRAW_QUIPS[Math.floor(Math.random() * DRAW_QUIPS.length)]); setSub("spin"); }
     else if (sub === "spin") { commitPile(pick); setReel(state.players.find(p => p.id === pick.playerId)); setSub("land"); }
     else if (sub === "land") {
       if (idx >= order.length - 1) finish();
@@ -562,8 +572,8 @@ function Draw({ state, update, go }) {
               {/* the name spin / landing */}
               {(sub === "spin" || sub === "land") &&
                 <div className="namebox">
-                  <div className="mono" style={{ color: "var(--lime)", fontSize: 12, letterSpacing: ".16em", marginBottom: 6 }}>
-                    {sub === "land" ? "WINS THE STICKER" : "PULLING A NAME"}
+                  <div key={sub === "land" ? "land" : quip} className="mono draw-quip" style={{ color: sub === "land" ? "var(--lime)" : "#C9C0AE", fontSize: 12, letterSpacing: ".1em", marginBottom: 6 }}>
+                    {sub === "land" ? "WINS THE STICKER" : quip}
                   </div>
                   <div className={"name-reel" + (sub === "land" ? " land" : " spin")}>
                     <Avatar player={sub === "land" ? curPlayer : reel} size={sub === "land" ? 40 : 32} />
@@ -580,8 +590,10 @@ function Draw({ state, update, go }) {
                     {tierEntries.length - receivedThisTier.length} of {tierEntries.length} player{tierEntries.length !== 1 ? "s" : ""} still to draw this tier
                   </div>
                   <div className="tier-players-row">
-                    {tierEntries.map(o => {
-                      const p = state.players.find(pl => pl.id === o.playerId);
+                    {tierEntries
+                      .map(o => ({ o, p: state.players.find(pl => pl.id === o.playerId) }))
+                      .sort((a, b) => (a.p?.name || "").localeCompare(b.p?.name || ""))
+                      .map(({ o, p }) => {
                       const got = receivedIds.has(o.playerId);
                       const isCurrent = pick && pick.playerId === o.playerId
                         && (sub === "spin" || sub === "land")

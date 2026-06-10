@@ -303,3 +303,7 @@ label.lbl{font-family:"DM Mono",monospace;font-size:10.5px;letter-spacing:.14em;
   .tier-preview-row{grid-template-columns:1fr;gap:8px}
   .tier-preview-count{justify-self:start}
 }
+
+/* quip line on the draw stage (fades in as each message changes) */
+.draw-quip{animation:quipin .35s ease}
+@keyframes quipin{from{opacity:.2;transform:translateY(3px)}to{opacity:1;transform:none}}
