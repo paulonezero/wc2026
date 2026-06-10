@@ -1,35 +1,32 @@
 # PROGRESS — WC2026 SS
 
 ## Current goal
-Ship the v1 sweepstake app in time for draw day on **2026-06-11**. The app is already deployed; ongoing work is incremental polish and the occasional fun touch.
+Ship the v1 sweepstake app in time for draw day on **2026-06-11**. The app is already deployed; ongoing work is incremental polish.
 
 ## Most recent change
-**Easter-egg "Donate to Paul's Revolut" button on the sign-up page.**
+**Mobile-view polish: new 520px breakpoint + a few inline-style → CSS-class swaps.**
 
-- New `CheatModal` component at the top of `sweepstake/screens1.jsx` — fixed overlay, panel-styled card, "Busted / Nice try. / Cheating attempt logged :)" copy, `Fair enough →` dismiss button. Backdrop click and Escape both dismiss.
-- New `gotcha` local state and a gold `Btn` (size sm) in the dark hero card of the SignUp fresh-form branch, label: "Donate to Paul's Revolut for a better set of teams". Disabled when no name is typed, matching the existing "I'm in →" guard.
-- On modal dismiss, the existing `join()` runs — so the user is signed up exactly as if they'd clicked "I'm in →" and lands on the "You're in the pool" confirmation screen.
+### Why
+On desktop / tablet the app looked good, but at phone widths (~360–414px) several layouts broke: horizontal scroll on Standings (team-odds row had a fixed 150px team-name cell, pushing the row to ~376px min width), podium names overflowed (whiteSpace:nowrap in narrow columns), the topbar squeezed the pot/host buttons, and panels kept desktop-sized padding eating the viewport.
 
-### Why this design
-- **Purely client-side.** No `pool.js` / `net.js` / `store.js` changes — the server still sees a normal `signup` POST. The joke is presentation only.
-- **No new modal infra.** The codebase has no dialog system and didn't need one — `CheatModal` is local to `screens1.jsx` and composes existing `.panel`, `.kept`, `.display`, `.muted`, `Btn` styles.
-- **No CSS file changes** — every visual is inline style or existing tokens.
-- **Disabled when name empty** mirrors `I'm in →` — simpler than branching the modal copy for the no-name case.
-
-### Files touched
-- `sweepstake/screens1.jsx` — added `CheatModal`, `gotcha` state, donate button below the input row, modal render in fresh-form branch.
+The previous responsive layer was a single `@media(max-width:820px)` block in `index.html` that flipped multi-column grids to single-column. It didn't address true phone width. Added a second tighter `@media(max-width:520px)` block plus a small set of named classes so the media query can hit them.
 
 ### Plan file
-`/Users/paulmcevoy/.claude/plans/consider-the-plan-in-rustling-whisper.md`
+`/Users/paulmcevoy/.claude/plans/the-app-looks-good-clever-feather.md`
+
+### Files touched
+- `index.html` — added `@media(max-width:520px)` block (shell padding, topbar, tabs, panel, matchrow, podium, sticker-grid, pile-grid, score-in, steps, confed-row, odds-row/odds-name/odds-bar, pool-grid, hero, search-row).
+- `sweepstake/styles.css` — added new classes: `.podium-name`, `.odds-row` (+ `.odds-rk`, `.odds-crest`, `.odds-name`, `.odds-bar`, `.odds-pct`, `.odds-owner`), `.pool-grid`, `.confed-row`, `.hero`, `.search-row`. Desktop versions; mobile overrides live in index.html.
+- `sweepstake/screens2.jsx` — podium name uses `.podium-name`; team-odds rows use `.odds-row` etc.; Standings row's name display now has `whiteSpace:nowrap + overflow:hidden + textOverflow:ellipsis`; Teams search row uses `.search-row`; confederation filter row uses `.confed-row`; Pool settings grid uses `.pool-grid`; all `fontSize:34` section headlines swapped to `clamp(26px,5.5vw,34px)`.
+- `sweepstake/screens1.jsx` — hero title clamp lowered min from 40px → 32px; hero card uses `.hero` class for padding (so it can drop on mobile); both `fontSize:34` headlines (Today, Draw) → clamp; donate Easter-egg button uses inline `whiteSpace:"normal"` + `lineHeight` so the long text wraps instead of being clipped.
+
+No changes to `data.js`, `store.js`, `net.js`, `ui.jsx`, `app.jsx`, `netlify/`, `package.json`.
 
 ## Verification (still to do by user)
-Run `npx netlify dev`, open the sign-up page. Steps in plan §Verification:
-1. Type name → both CTAs enable.
-2. Click donate → modal appears.
-3. Click "Fair enough →" → modal closes, user signed up, lands on "You're in the pool" screen.
-4. Backdrop click and Escape both dismiss with the same effect.
-5. Two-browser sync: new player appears in second browser within ~20s.
-6. After draw runs, the joke button no longer renders (the fresh branch is gated by `me` and `draw.done`).
+1. `npx netlify dev`. Open Chrome DevTools device mode at iPhone SE (375), iPhone 12 Pro (390), Galaxy S20 (360).
+2. Walk every tab signed-out and signed-in, before and after draw (Admin → "Load demo pool" flips to drawn state).
+3. Check: no horizontal scroll on Standings; podium names ellipsis cleanly; topbar (brand mark + WC2026 SS + pot + Host) fits one row at 360px; tabs fit one row (horizontal-scrollable if needed); Teams search input goes full-width; sticker grid is 2 cols; admin pool-settings inputs have usable widths.
+4. Confirm 820px (tablet) and 1180px (desktop) didn't regress — the new rules only fire at ≤520px.
 
 ## Open / future work (from ARCHITECTURE.md §9 + survey)
 - **Reset/clear polish.** Existing "Reset pool" button works (full wipe via debounced `save`). Gaps: no per-player remove UI (helper `Store.removePlayer` at `store.js:54` is unused); no partial reset that keeps pool config; no dedicated server `reset` action.
@@ -40,4 +37,4 @@ Run `npx netlify dev`, open the sign-up page. Steps in plan §Verification:
 - **Self-host flag images** if offline robustness matters.
 
 ## Next step
-Wait for user to verify the new button locally. If approved, no follow-up; if not, iterate on copy / placement / visual treatment.
+User verifies mobile layout end-to-end in DevTools. If anything still cramped, iterate (likely candidates: standings row gap at 16px is generous on phone; matchrow's `mt-mid` could shrink crests).

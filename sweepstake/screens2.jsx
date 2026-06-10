@@ -28,7 +28,7 @@ function Standings({ state, go }) {
     <div className="fadein">
       <div className="row" style={{ justifyContent: "space-between", flexWrap: "wrap", gap: 12, marginBottom: 18 }}>
         <div>
-          <div className="display" style={{ fontSize: 34, textTransform: "uppercase" }}>The Standings</div>
+          <div className="display" style={{ fontSize: "clamp(26px,5.5vw,34px)", textTransform: "uppercase" }}>The Standings</div>
           <div className="muted" style={{ fontSize: 14 }}>
             Each player's chance of owning the champion · {state.currency}{state.pot || "?"} pot
           </div>
@@ -43,9 +43,9 @@ function Standings({ state, go }) {
           const h = place === 1 ? 150 : place === 2 ? 120 : 100;
           const col = place === 1 ? "var(--gold)" : place === 2 ? "var(--paper-3)" : "#E3B57A";
           return (
-            <div key={slot} style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "flex-end" }}>
+            <div key={slot} style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "flex-end", minWidth: 0, width: "100%" }}>
               <Avatar player={p} size={place === 1 ? 56 : 44} />
-              <div className="display" style={{ fontSize: place === 1 ? 19 : 16, textTransform: "uppercase", margin: "8px 0 2px", whiteSpace: "nowrap" }}>{p.name}</div>
+              <div className="podium-name" style={{ fontSize: place === 1 ? 19 : 16 }}>{p.name}</div>
               <div className="display" style={{ fontSize: place === 1 ? 26 : 20, color: "var(--pop)", marginBottom: 4 }}>{fp2(pwp[p.id])}</div>
               <div style={{ width: "100%", height: h, background: col, border: "3px solid var(--ink)",
                 borderRadius: "12px 12px 0 0", marginTop: 4, display: "flex", alignItems: "flex-start",
@@ -73,7 +73,7 @@ function Standings({ state, go }) {
                 <div className="display" style={{ fontSize: 30, width: 40, textAlign: "center" }}>{i + 1}</div>
                 <Avatar player={p} size={42} />
                 <div style={{ flex: 1, minWidth: 0 }}>
-                  <div className="display" style={{ fontSize: 19, textTransform: "uppercase" }}>
+                  <div className="display" style={{ fontSize: 19, textTransform: "uppercase", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
                     {p.name}{isMe && <span className="tag" style={{ marginLeft: 8, background: "var(--pop)", color: "#fff", borderColor: "var(--ink)" }}>you</span>}
                   </div>
                   <div className="teamchips" style={{ marginTop: 6 }}>
@@ -109,14 +109,13 @@ function Standings({ state, go }) {
       {showTeams &&
         <div className="card" style={{ padding: "8px 8px" }}>
           {teamsByOdds.slice(0, 16).map((t, i) => (
-            <div key={t.code} style={{ display: "flex", alignItems: "center", gap: 13, padding: "8px 12px",
-              borderBottom: i < 15 ? "1px solid rgba(26,22,17,.08)" : "none" }}>
-              <div className="mono" style={{ width: 24, color: "var(--ink-soft)", fontSize: 13 }}>{i + 1}</div>
-              <div style={{ width: 42 }}><Crest team={t} h={28} fs={13} /></div>
-              <div className="display" style={{ fontSize: 14, textTransform: "uppercase", width: 150, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{t.name}</div>
-              <div style={{ flex: 1 }}><Bar value={tp[t.code] / maxT} color={i === 0 ? "var(--gold)" : i < 4 ? "var(--pop)" : "var(--blue)"} /></div>
-              <div className="display" style={{ fontSize: 15, width: 56, textAlign: "right" }}>{fp2(tp[t.code])}</div>
-              <div style={{ width: 26 }}><Owner player={window.SS.ownerOf(state, t.code)} size={22} label={false} /></div>
+            <div key={t.code} className="odds-row" style={i === 15 ? { borderBottom: "none" } : null}>
+              <div className="mono odds-rk">{i + 1}</div>
+              <div className="odds-crest"><Crest team={t} h={28} fs={13} /></div>
+              <div className="odds-name">{t.name}</div>
+              <div className="odds-bar"><Bar value={tp[t.code] / maxT} color={i === 0 ? "var(--gold)" : i < 4 ? "var(--pop)" : "var(--blue)"} /></div>
+              <div className="display odds-pct">{fp2(tp[t.code])}</div>
+              <div className="odds-owner"><Owner player={window.SS.ownerOf(state, t.code)} size={22} label={false} /></div>
             </div>
           ))}
           <div className="mono muted" style={{ fontSize: 11.5, padding: "10px 12px 4px", lineHeight: 1.5 }}>
@@ -155,12 +154,12 @@ function Teams({ state, go }) {
     <div className="fadein">
       <div className="row" style={{ justifyContent: "space-between", flexWrap: "wrap", gap: 14, marginBottom: 8 }}>
         <div>
-          <div className="display" style={{ fontSize: 34, textTransform: "uppercase" }}>The Field</div>
+          <div className="display" style={{ fontSize: "clamp(26px,5.5vw,34px)", textTransform: "uppercase" }}>The Field</div>
           <div className="muted" style={{ fontSize: 14, marginTop: 2 }}>
             48 teams · <b>{aliveTot} still alive</b>{state.draw.done ? " · tap an owner to see who's got who" : " · odds set by FIFA ranking"}
           </div>
         </div>
-        <div className="row" style={{ gap: 8 }}>
+        <div className="search-row">
           <input className="field" placeholder="Search team…" value={q} onChange={e => setQ(e.target.value)} style={{ width: 170 }} />
           <div className="row" style={{ border: "1px solid var(--line)", borderRadius: 10, overflow: "hidden" }}>
             {["odds", "group"].map(v => (
@@ -174,7 +173,7 @@ function Teams({ state, go }) {
         </div>
       </div>
 
-      <div className="row" style={{ gap: 7, flexWrap: "wrap", margin: "14px 0 22px" }}>
+      <div className="confed-row">
         {confeds.map(c => (
           <button key={c} onClick={() => setConfed(c)} className="mono"
             style={{ border: "1px solid var(--line)", borderRadius: 8, padding: "7px 14px", cursor: "pointer", fontSize: 11.5,
@@ -224,7 +223,7 @@ function Admin({ state, update, go }) {
     <div className="fadein">
       <div className="row" style={{ justifyContent: "space-between", flexWrap: "wrap", gap: 12, marginBottom: 18 }}>
         <div>
-          <div className="display" style={{ fontSize: 34, textTransform: "uppercase" }}>Host Desk</div>
+          <div className="display" style={{ fontSize: "clamp(26px,5.5vw,34px)", textTransform: "uppercase" }}>Host Desk</div>
           <div className="muted" style={{ fontSize: 14 }}>Run the draw, enter results, drive the tournament forward</div>
         </div>
         <div className="tag" style={{ background: "var(--lime)", padding: "6px 14px" }}>● Source: Manual entry</div>
@@ -331,7 +330,7 @@ function Admin({ state, update, go }) {
           {/* pool settings */}
           <div className="panel">
             <div className="kept">Pool settings</div>
-            <div style={{ display: "grid", gridTemplateColumns: "1fr 90px 64px", gap: 10, marginTop: 12 }}>
+            <div className="pool-grid">
               <div><label className="lbl">Pool name</label>
                 <input className="field" value={state.poolName} onChange={e => update(s => s.poolName = e.target.value)} /></div>
               <div><label className="lbl">Pot</label>

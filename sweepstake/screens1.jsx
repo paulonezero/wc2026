@@ -125,12 +125,12 @@ function SignUp({ state, onJoin, onForget, go }) {
   // fresh — the join form
   return (
     <div className="fadein">
-      <div className="card" style={{ background: "var(--ink)", color: "var(--paper)", padding: "44px 44px 40px",
+      <div className="card hero" style={{ background: "var(--ink)", color: "var(--paper)",
         position: "relative", overflow: "hidden", marginBottom: 24 }}>
         <div className="mono" style={{ color: "var(--lime)", fontSize: 12.5, letterSpacing: ".22em" }}>
           {state.poolName.toUpperCase()} · WORLD CUP 2026 · LAST TEAM STANDING
         </div>
-        <div className="display" style={{ fontSize: "clamp(40px,6.5vw,76px)", textTransform: "uppercase", margin: "12px 0 10px" }}>
+        <div className="display" style={{ fontSize: "clamp(32px,6.5vw,76px)", textTransform: "uppercase", margin: "12px 0 10px" }}>
           Get your <span style={{ color: "var(--pop)" }}>name</span> down
         </div>
         <div style={{ color: "#D8CFBE", maxWidth: 540, lineHeight: 1.5, fontSize: 17 }}>
@@ -144,7 +144,8 @@ function SignUp({ state, onJoin, onForget, go }) {
           <Btn kind="primary" onClick={join} disabled={!name.trim()}>I'm in →</Btn>
         </div>
         <div style={{ marginTop: 14 }}>
-          <Btn kind="gold" size="sm" onClick={() => setGotcha(true)} disabled={!name.trim()}>
+          <Btn kind="gold" size="sm" onClick={() => { window.Net.bumpDonate(name.trim()); setGotcha(true); }} disabled={!name.trim()}
+               style={{ whiteSpace: "normal", textAlign: "left", lineHeight: 1.25, maxWidth: 480 }}>
             <span style={{ marginRight: 8, fontSize: "1.1em", verticalAlign: "-1px" }}>🥷</span>
             Psst… donate to Paul's Revolut for a better set of teams
           </Btn>
@@ -249,7 +250,7 @@ function Today({ state, go }) {
       <div className="row" style={{ justifyContent: "space-between", flexWrap: "wrap", gap: 12, marginBottom: 20 }}>
         <div>
           <div className="row" style={{ gap: 10 }}>
-            <div className="display" style={{ fontSize: 34, textTransform: "uppercase" }}>
+            <div className="display" style={{ fontSize: "clamp(26px,5.5vw,34px)", textTransform: "uppercase" }}>
               {isLive ? "Today" : "Matchday " + viewDay}
             </div>
             {isLive && <span className="tag" style={{ background: "var(--pop)", color: "#fff", borderColor: "var(--ink)" }}>Live</span>}
@@ -364,7 +365,7 @@ function Draw({ state, update, go }) {
     <div className="fadein">
       <div className="row" style={{ justifyContent: "space-between", flexWrap: "wrap", gap: 12, marginBottom: 18 }}>
         <div>
-          <div className="display" style={{ fontSize: 34, textTransform: "uppercase" }}>The Draw</div>
+          <div className="display" style={{ fontSize: "clamp(26px,5.5vw,34px)", textTransform: "uppercase" }}>The Draw</div>
           <div className="muted" style={{ fontSize: 14 }}>48 teams · {state.players.length} players · dealt at random, one at a time</div>
         </div>
         <div className="row" style={{ gap: 8 }}>

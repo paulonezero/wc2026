@@ -73,6 +73,22 @@ export default async (req) => {
       return json({ state, you: id });
     }
 
+    // --- public: bump the donate-button click counter ---------------------
+    if (action === "bump") {
+      const n = (await store.get("donate_clicks", { type: "json" })) || 0;
+      const next = n + 1;
+      await store.setJSON("donate_clicks", next);
+      console.log("[donate] clicked", { name: String(body.name || "").trim().slice(0, 60), count: next, at: new Date().toISOString() });
+      return json({ ok: true, count: next });
+    }
+
+    // --- admin: read the donate counter (host-only) -----------------------
+    if (action === "stats") {
+      if (body.password !== adminPassword()) return json({ error: "Unauthorized" }, 401);
+      const donateClicks = (await store.get("donate_clicks", { type: "json" })) || 0;
+      return json({ donateClicks });
+    }
+
     // --- admin: check the password ----------------------------------------
     if (action === "verify") {
       return body.password === adminPassword() ? json({ ok: true }) : json({ error: "Wrong code." }, 401);

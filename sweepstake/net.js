@@ -78,6 +78,11 @@
     return normalize(state);
   }
 
+  function bumpDonate(name) {
+    if (_mode !== "remote") return;
+    post({ action: "bump", name }).catch(() => {});
+  }
+
   async function verify(password, state) {
     if (_mode === "remote") {
       try { await post({ action: "verify", password }); return true; }
@@ -86,5 +91,5 @@
     return String(password) === String((state && state.adminPin) || "2026");
   }
 
-  window.Net = { init, getState, signup, save, verify, normalize, getMode: () => _mode };
+  window.Net = { init, getState, signup, save, verify, bumpDonate, normalize, getMode: () => _mode };
 })();
