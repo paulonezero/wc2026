@@ -4,6 +4,50 @@
 Ship the v1 sweepstake app in time for draw day on **2026-06-11**. The app is already deployed; ongoing work is incremental polish.
 
 ## Most recent change
+**Real 2026 World Cup group-stage fixtures — replaced procedurally-generated 72-match schedule with the official ESPN/FIFA fixture list (17 matchdays, 11–27 Jun).**
+
+### Why
+The old `FIXTURES` builder in `data.js` derived matchups from a synthetic FIFA-rank rotation across 12 matchdays. With the real draw locked in, the fixtures, dates, kickoff times, and venues didn't reflect the published schedule. The host noticed the fixtures looked wrong on Today; this swaps in the canonical data.
+
+### Files touched
+- `sweepstake/data.js` —
+  - `TOTAL_DAYS` bumped 12 → 17 (real group stage runs Thu 11 Jun → Sat 27 Jun).
+  - Replaced the procedural `FIXTURES` builder with a hard-coded array of 72 entries via a compact `F(id, day, group, home, away, ko, venue)` helper. IDs kept in `g{L}r{R}m{M}` shape so any future server-side score keys remain stable.
+  - Times stored as 24h ET. Late-night kickoffs (00:00 ET, technically *next* ET day but grouped with previous matchday per ESPN/FIFA convention) tagged via the existing `day` field.
+  - Added `koSortKey(ko)` that rolls 00:00–05:59 ET past 24h so each day's matches sort chronologically (the late ones land at the end of their matchday).
+  - Added `fmtKo(fx)` display helper exported on `window.SS` — renders `"HH:MM ET"` with a `(+1)` suffix when the kickoff is past ET midnight.
+  - `KICKS` const kept for export compat (no longer used).
+- `sweepstake/screens1.jsx` — `Today.FixtureRow` now renders `fmtKo(f)` instead of `f.ko`, so kickoffs display as `"15:00 ET"` / `"00:00 ET (+1)"`. `fmtKo` added to the `window.SS` destructure at the top.
+
+### Verification done
+Sanity-script confirmed: 72 total fixtures, 12 groups × 6 matches each, per-day counts 2/2/4/4/4/4/4/4/4/4/4/4/4/6/6/6/6 = 72, every team plays exactly its 3 group opponents (no cross-group / no self-matches), and the sort puts the late-night 00:00 ET match at the end of its matchday (e.g. day 3 → QAT-SUI 15:00 → BRA-MAR 18:00 → HAI-SCO 21:00 → AUS-TUR 00:00 (+1)).
+
+### Files unchanged
+`net.js`, `app.jsx`, `ui.jsx`, `screens2.jsx`, `store.js`, `pool.js`, `styles.css`, `index.html`. Admin "Matchday control" / "Enter results" dropdowns automatically get all 17 days because they iterate `TOTAL_DAYS`. The demo seed (`store.js:152` sets `currentDay = 8` and fills `fx.day < 8`) still works — just shows mid-R1/start-of-R2 standings instead of the old mid-R2 state. No fixture-id changes that affect existing pools (tournament hasn't started, so no real scores yet).
+
+### Earlier this session
+**`apply-prefilled-draw.mjs` — one-shot Node script to push a pre-arranged 8-player draw to a deployed pool.**
+
+### Why
+Host already has the offline draw result for one specific pool (8 players: Cian/Vera/Lisa/Jack/Paul/Karen/Ken/Leon, 6 teams each). Faster to push via API than to log in + click 48 dropdowns in the Admin "Enter draw manually" panel.
+
+### Files touched
+- `apply-prefilled-draw.mjs` (new, project root) — takes `<site-url> <admin-password>` as CLI args. GETs `/api/pool` to preserve `poolName`/`pot`/`currency`/`drawDate`, then POSTs `action:"save"` with a fresh state: 8 players with deterministic ids (`p_<name>_<ts>`), `draw.assignments` for all 48 codes, `phase:"drawn"`, fresh `teams` (all alive), empty `scores`. Hard-coded picks block + sanity checks (count=48, no dupes, full coverage). No project deps; uses built-in `fetch`.
+
+### Earlier this session
+**Admin "Enter draw manually" panel — record an offline/pre-drawn result without re-running the animation.**
+
+### Why
+A live pool already ran the physical draw offline. The host needs to enter the agreed player names and the team each got into the deployed app, without the animated draw re-rolling them. Existing flow only supported the animated draw or a full reset.
+
+### Files touched
+- `sweepstake/store.js` — added `commitManualDraw(state, picks)` where `picks` is `{teamCode: playerId}`. Iterates `TEAMS`, skips entries with no/invalid player or unknown team code, builds `{assignments, order}` with `tier:1, tierTotal:1` per entry, writes `state.draw = { done:true, ... }` and `state.phase = "drawn"`. Exported on `window.Store`.
+- `sweepstake/screens2.jsx` — `Admin` component now declares `manualOpen`, `picks` (initial value = current `state.draw.assignments`), `pickCounts` (useMemo), `pickedTotal`, plus `setPick` and `commitManual` handlers. New "Enter draw manually" panel inserted in the LEFT column between **Players** and **Matchday control**. Hidden by default behind a Show/Hide toggle. When open and `state.players.length > 0`: per-player chips with live team-count, team-by-group grid (Groups A–L, sorted by FIFA desc within group) where each row shows flag + code + a player-name `<select>`, and footer with Commit/Save + Clear picks + "N/48 assigned" counter. Commit prompts a confirm (overwrite vs first commit).
+
+### Files unchanged
+`net.js`, `app.jsx`, `ui.jsx`, `index.html`, `data.js`, `styles.css`, `pool.js`, `screens1.jsx`. After-draw piles render the same since `state.draw.order` still contains `{code, playerId}` entries (tier info isn't consulted post-draw).
+
+### Earlier this session
 **Tiered draw by FIFA ranking — bottom-up, one team per player per tier, with live UI for current tier + remaining teams/players.**
 
 ### Why
@@ -53,11 +97,11 @@ Untouched (donate/currency/pool infrastructure): `sweepstake/net.js` (`bumpDonat
 
 ## Verification (still to do by user)
 1. `npx netlify dev`. Sign-up page loads and donate button still POSTs `/api/pool` with `action:"bump"` (Network tab) — pot counter increments.
-2. Host login → Admin → Teams → "By group" shows the **official** A–L groups (e.g. group J = ARG/AUT/ALG/JOR; group L = ENG/CRO/PAN/GHA).
-3. Admin → Players panel: "Seed 12 demo players" → "Open the draw". Idle screen shows the **tier preview** with the top tier highlighted in gold at the top, weakest at the bottom; subtitle reads "4 tiers by FIFA rank, bottom-up". Try also with a non-divisor count (e.g. seed 12 then remove 2 to get 10 players — preview should show 5 tiers, top tier short with 8 teams).
-4. Hit "Run the draw". Verify the new flow: tier-intro splash announces "BOTTOM TIER · Weakest by FIFA ranking" with its 12 flag set → drum shows only that tier's remaining flags ("12 left in this tier") → flag pops → name reel → land. Across the tier, the **players-this-tier strip** dims each avatar with a ✓ tick once they've received, gold pulse on the current pick. Between tiers, the banner shifts to "TIER 2 of 4" and a fresh intro splash plays.
-5. Relaxed/Normal/Quick segment changes pace (tier-intro respects speed); Pause/Next manual step still works mid-tier and across tier boundaries; "Skip all" jumps to done with all piles filled.
-6. After the draw, each player's pile shows their teams in pull order (bottom-tier acquired first, top-tier last). Currency still €, sign-up hero pot label still uses `state.currency`/`state.pot`, `POOL_NAME` env still drives pool identity.
+2. Host login → Admin → **Players** panel: add the offline draw's names (or seed demos). Then open the new **Enter draw manually** panel: per-player chips show 0; pick a player for each team in each Group A–L block. Counter ticks up to N/48; selected rows go cream.
+3. Hit **Commit draw** → confirm. Draw status flips to "Complete ✓". Open Standings — table renders with each player's teams + odds. Open Teams → owners show against each team.
+4. Re-open Admin → Enter draw manually. Picks should be pre-loaded from the just-committed draw. Change one team's owner, hit **Save changes**, confirm overwrite. Standings reflects the change.
+5. Sanity-check the legacy animated draw still works: Clear all players → seed 12 → Open the draw → run it. (Manual entry just provides an alternate path; the tiered draw is unchanged.)
+6. Currency still €, sign-up hero pot label still uses `state.currency`/`state.pot`, `POOL_NAME` env still drives pool identity.
 
 ## Open / future work (from ARCHITECTURE.md §9 + survey)
 - **Reset/clear polish.** ~~Existing "Reset pool" button works (full wipe via debounced `save`). Gaps: no per-player remove UI (helper `Store.removePlayer` at `store.js:54` is unused); no partial reset that keeps pool config;~~ Per-player remove + seed + partial-clear shipped this session. Still missing: no dedicated server `reset` action (the local clearPlayers + debounced save will push the cleared state to the backend).
@@ -68,4 +112,4 @@ Untouched (donate/currency/pool infrastructure): `sweepstake/net.js` (`bumpDonat
 - **Self-host flag images** if offline robustness matters.
 
 ## Next step
-User runs `npx netlify dev` and verifies the 6 checks above. Once happy, commit (`sweepstake/data.js`, `sweepstake/store.js`, `sweepstake/screens1.jsx`, `sweepstake/styles.css`, `PROGRESS.md`) and optionally `git clean -fd merge_to_repo/`.
+User runs `npx netlify dev` and spot-checks: (a) Today view shows real matchups for each day Jun 11 → Jun 27 with `HH:MM ET` (and `(+1)` for late-night ones); (b) Admin "Enter results" dropdown lists all 17 days; (c) day 3 fixture order is QAT-SUI / BRA-MAR / HAI-SCO / AUS-TUR (00:00 +1). Once happy, commit `sweepstake/data.js`, `sweepstake/screens1.jsx`, `PROGRESS.md`.

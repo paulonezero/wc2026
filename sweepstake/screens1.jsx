@@ -1,7 +1,7 @@
 /* ============================================================================
    SCREENS · 1 — Sign Up, Today, Draw
    ========================================================================== */
-const { TEAMS: TM, GROUP_LETTERS, fixturesOnDay, fmtDate, dateForDay, fmtPct: pct,
+const { TEAMS: TM, GROUP_LETTERS, fixturesOnDay, fmtDate, fmtKo, dateForDay, fmtPct: pct,
         ownerOf, teamByCode, teamsOfPlayer, splitCounts, TOTAL_DAYS,
         tierLabel, tierSubtitle } = window.SS;
 
@@ -234,7 +234,7 @@ function Today({ state, go }) {
         </div>
         <div className="mt-mid">
           {sc ? <div className="scorebox live">{sc.hs}<span>–</span>{sc.as}</div>
-              : <div className="kotime">{f.ko}</div>}
+              : <div className="kotime">{fmtKo(f)}</div>}
           <div className="mono muted" style={{ fontSize: 10, marginTop: 4 }}>{sc ? "Live/FT" : "Group " + f.group}</div>
         </div>
         <div className="mt-side">

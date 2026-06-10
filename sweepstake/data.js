@@ -85,10 +85,16 @@
     return `https://flagcdn.com/w${w}/${iso}.png`;
   }
 
-  /* ---- fixtures: full group-stage schedule, 72 matches over 12 days ------ */
-  const KICKS = ["13:00", "16:00", "19:00", "22:00"];
+  /* ---- fixtures: official 2026 group-stage schedule -------------------- */
+  /* 72 matches, 17 matchdays (Thu 11 Jun → Sat 27 Jun). Times are ET 24h.
+     ESPN/FIFA schedule grouped late-night kickoffs (00:00–05:00 ET) with the
+     PREVIOUS matchday, so e.g. day 3 (Sat 13 Jun) includes AUS-TUR at 00:00.
+     `koSortKey()` rolls AM hours past midnight so the day's matches sort in
+     chronological play order.                                              */
   const TOURNAMENT_START = "2026-06-11";
-  const TOTAL_DAYS = 12;
+  const TOTAL_DAYS = 17;
+  // legacy export — no longer drives fixture generation, kept for compat
+  const KICKS = ["13:00", "16:00", "19:00", "22:00"];
 
   function dateForDay(day) {
     const base = new Date(TOURNAMENT_START + "T00:00:00");
@@ -99,30 +105,113 @@
     const d = dateForDay(day);
     return d.toLocaleDateString("en-GB", { weekday: "short", day: "numeric", month: "short" });
   }
+  // matches at 00:00–05:59 ET are *next* ET day but belong to the previous
+  // matchday; bump them past 24h so sort puts them last in their matchday.
+  function koSortKey(ko) {
+    const [h, m] = ko.split(":").map(Number);
+    return (h < 6 ? h + 24 : h) * 60 + m;
+  }
+  // display-formatted kickoff (HH:MM ET, with +1 hint for late-night wraps)
+  function fmtKo(fx) {
+    const h = parseInt(fx.ko.slice(0, 2), 10);
+    return fx.ko + " ET" + (h < 6 ? " (+1)" : "");
+  }
 
-  const FIXTURES = (function build() {
-    const fx = [];
-    GROUP_LETTERS.forEach((L, g) => {
-      const grp = TEAMS.filter(t => t.group === L).sort((a, b) => b.fifa - a.fifa);
-      const [t0, t1, t2, t3] = grp;
-      const rounds = [
-        [[t0, t1], [t2, t3]],
-        [[t0, t2], [t3, t1]],
-        [[t0, t3], [t1, t2]],
-      ];
-      rounds.forEach((pairs, r) => {
-        pairs.forEach((m, mi) => {
-          const day = r * 4 + Math.floor(g / 3) + 1;
-          fx.push({
-            id: `g${L}r${r}m${mi}`, day, round: "group", group: L,
-            home: m[0].code, away: m[1].code,
-            ko: KICKS[(g * 2 + mi) % 4],
-          });
-        });
-      });
-    });
-    return fx.sort((a, b) => a.day - b.day || a.ko.localeCompare(b.ko));
-  })();
+  // helper to keep entries compact
+  const F = (id, day, group, home, away, ko, venue) =>
+    ({ id, day, round: "group", group, home, away, ko, venue });
+
+  const FIXTURES = [
+    // Day 1 · Thu 11 Jun
+    F("gAr0m0", 1, "A", "MEX", "RSA", "15:00", "Mexico City"),
+    F("gAr0m1", 1, "A", "KOR", "CZE", "22:00", "Zapopan"),
+    // Day 2 · Fri 12 Jun
+    F("gBr0m0", 2, "B", "CAN", "BIH", "15:00", "Toronto"),
+    F("gDr0m0", 2, "D", "USA", "PAR", "21:00", "Inglewood"),
+    // Day 3 · Sat 13 Jun
+    F("gBr0m1", 3, "B", "QAT", "SUI", "15:00", "Santa Clara"),
+    F("gCr0m0", 3, "C", "BRA", "MAR", "18:00", "East Rutherford"),
+    F("gCr0m1", 3, "C", "HAI", "SCO", "21:00", "Foxborough"),
+    F("gDr0m1", 3, "D", "AUS", "TUR", "00:00", "Vancouver"),
+    // Day 4 · Sun 14 Jun
+    F("gEr0m0", 4, "E", "GER", "CUW", "13:00", "Houston"),
+    F("gFr0m0", 4, "F", "NED", "JPN", "16:00", "Arlington"),
+    F("gEr0m1", 4, "E", "CIV", "ECU", "19:00", "Philadelphia"),
+    F("gFr0m1", 4, "F", "SWE", "TUN", "22:00", "Guadalupe"),
+    // Day 5 · Mon 15 Jun
+    F("gHr0m0", 5, "H", "ESP", "CPV", "13:00", "Atlanta"),
+    F("gGr0m0", 5, "G", "BEL", "EGY", "18:00", "Seattle"),
+    F("gHr0m1", 5, "H", "KSA", "URU", "18:00", "Miami Gardens"),
+    F("gGr0m1", 5, "G", "IRN", "NZL", "00:00", "Inglewood"),
+    // Day 6 · Tue 16 Jun
+    F("gIr0m0", 6, "I", "FRA", "SEN", "15:00", "East Rutherford"),
+    F("gIr0m1", 6, "I", "IRQ", "NOR", "18:00", "Foxborough"),
+    F("gJr0m0", 6, "J", "ARG", "ALG", "21:00", "Kansas City"),
+    F("gJr0m1", 6, "J", "AUT", "JOR", "00:00", "Santa Clara"),
+    // Day 7 · Wed 17 Jun
+    F("gKr0m0", 7, "K", "POR", "COD", "13:00", "Houston"),
+    F("gLr0m0", 7, "L", "ENG", "CRO", "16:00", "Arlington"),
+    F("gLr0m1", 7, "L", "GHA", "PAN", "19:00", "Toronto"),
+    F("gKr0m1", 7, "K", "UZB", "COL", "22:00", "Mexico City"),
+    // Day 8 · Thu 18 Jun
+    F("gAr1m0", 8, "A", "CZE", "RSA", "12:00", "Atlanta"),
+    F("gBr1m0", 8, "B", "SUI", "BIH", "15:00", "Inglewood"),
+    F("gBr1m1", 8, "B", "CAN", "QAT", "18:00", "Vancouver"),
+    F("gAr1m1", 8, "A", "MEX", "KOR", "23:00", "Zapopan"),
+    // Day 9 · Fri 19 Jun
+    F("gDr1m0", 9, "D", "USA", "AUS", "15:00", "Seattle"),
+    F("gCr1m0", 9, "C", "SCO", "MAR", "18:00", "Foxborough"),
+    F("gCr1m1", 9, "C", "BRA", "HAI", "21:00", "Philadelphia"),
+    F("gDr1m1", 9, "D", "TUR", "PAR", "00:00", "Santa Clara"),
+    // Day 10 · Sat 20 Jun
+    F("gFr1m0", 10, "F", "NED", "SWE", "13:00", "Houston"),
+    F("gEr1m0", 10, "E", "GER", "CIV", "16:00", "Toronto"),
+    F("gEr1m1", 10, "E", "ECU", "CUW", "20:00", "Kansas City"),
+    F("gFr1m1", 10, "F", "TUN", "JPN", "00:00", "Guadalupe"),
+    // Day 11 · Sun 21 Jun
+    F("gHr1m0", 11, "H", "ESP", "KSA", "12:00", "Atlanta"),
+    F("gGr1m0", 11, "G", "BEL", "IRN", "15:00", "Inglewood"),
+    F("gHr1m1", 11, "H", "URU", "CPV", "18:00", "Miami Gardens"),
+    F("gGr1m1", 11, "G", "NZL", "EGY", "21:00", "Vancouver"),
+    // Day 12 · Mon 22 Jun
+    F("gJr1m0", 12, "J", "ARG", "AUT", "13:00", "Arlington"),
+    F("gIr1m0", 12, "I", "FRA", "IRQ", "17:00", "Philadelphia"),
+    F("gIr1m1", 12, "I", "NOR", "SEN", "20:00", "East Rutherford"),
+    F("gJr1m1", 12, "J", "JOR", "ALG", "23:00", "Santa Clara"),
+    // Day 13 · Tue 23 Jun
+    F("gKr1m0", 13, "K", "POR", "UZB", "13:00", "Houston"),
+    F("gLr1m0", 13, "L", "ENG", "GHA", "16:00", "Foxborough"),
+    F("gLr1m1", 13, "L", "PAN", "CRO", "19:00", "Toronto"),
+    F("gKr1m1", 13, "K", "COL", "COD", "22:00", "Zapopan"),
+    // Day 14 · Wed 24 Jun (groups A, B, C close)
+    F("gBr2m0", 14, "B", "SUI", "CAN", "15:00", "Vancouver"),
+    F("gBr2m1", 14, "B", "BIH", "QAT", "15:00", "Seattle"),
+    F("gCr2m0", 14, "C", "SCO", "BRA", "18:00", "Miami Gardens"),
+    F("gCr2m1", 14, "C", "MAR", "HAI", "18:00", "Atlanta"),
+    F("gAr2m0", 14, "A", "CZE", "MEX", "21:00", "Mexico City"),
+    F("gAr2m1", 14, "A", "RSA", "KOR", "21:00", "Guadalupe"),
+    // Day 15 · Thu 25 Jun (groups D, E, F close)
+    F("gEr2m0", 15, "E", "ECU", "GER", "16:00", "East Rutherford"),
+    F("gEr2m1", 15, "E", "CUW", "CIV", "16:00", "Philadelphia"),
+    F("gFr2m0", 15, "F", "JPN", "SWE", "19:00", "Arlington"),
+    F("gFr2m1", 15, "F", "TUN", "NED", "19:00", "Kansas City"),
+    F("gDr2m0", 15, "D", "TUR", "USA", "22:00", "Inglewood"),
+    F("gDr2m1", 15, "D", "PAR", "AUS", "22:00", "Santa Clara"),
+    // Day 16 · Fri 26 Jun (groups G, H, I close)
+    F("gIr2m0", 16, "I", "NOR", "FRA", "15:00", "Foxborough"),
+    F("gIr2m1", 16, "I", "SEN", "IRQ", "15:00", "Toronto"),
+    F("gHr2m0", 16, "H", "URU", "ESP", "20:00", "Zapopan"),
+    F("gHr2m1", 16, "H", "CPV", "KSA", "20:00", "Houston"),
+    F("gGr2m0", 16, "G", "EGY", "IRN", "23:00", "Seattle"),
+    F("gGr2m1", 16, "G", "NZL", "BEL", "23:00", "Vancouver"),
+    // Day 17 · Sat 27 Jun (groups J, K, L close)
+    F("gLr2m0", 17, "L", "PAN", "ENG", "17:00", "East Rutherford"),
+    F("gLr2m1", 17, "L", "CRO", "GHA", "17:00", "Philadelphia"),
+    F("gKr2m0", 17, "K", "COL", "POR", "19:30", "Miami Gardens"),
+    F("gKr2m1", 17, "K", "COD", "UZB", "19:30", "Atlanta"),
+    F("gJr2m0", 17, "J", "ALG", "AUT", "22:00", "Kansas City"),
+    F("gJr2m1", 17, "J", "JOR", "ARG", "22:00", "Arlington"),
+  ].sort((a, b) => a.day - b.day || koSortKey(a.ko) - koSortKey(b.ko));
 
   function fixturesOnDay(day) { return FIXTURES.filter(f => f.day === day); }
 
@@ -243,7 +332,7 @@
   window.SS = {
     TEAMS, GROUP_LETTERS, CONFED_LABEL, SCALE,
     FIXTURES, KICKS, TOURNAMENT_START, TOTAL_DAYS,
-    dateForDay, fmtDate, fixturesOnDay, mockScore,
+    dateForDay, fmtDate, fmtKo, fixturesOnDay, mockScore,
     formMap, formDelta, isAlive, teamWinProbs, playerWinProbs,
     teamsOfPlayer, ownerOf, aliveCount, teamByCode, fmtPct, splitCounts, flagURL, textOn,
     tierLabel, tierSubtitle,
