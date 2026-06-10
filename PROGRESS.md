@@ -4,6 +4,24 @@
 Ship the v1 sweepstake app in time for draw day on **2026-06-11**. The app is already deployed; ongoing work is incremental polish.
 
 ## Most recent change
+**Sign-ups close at 16 players. Cap surfaced in public SignUp + Admin Players panel; server hard-cap lowered to match.**
+
+### Why
+Server already had a silent `MAX_PLAYERS = 24` ceiling that surfaced only as a generic "Sign-ups are closed." alert on the join attempt. Host wants the front door to actually close at 16 (a clean 48 ÷ 16 = 3 teams each), with users seeing they're locked out before they type a name.
+
+### Files touched
+- `netlify/functions/pool.js` — `MAX_PLAYERS` 24 → 16; comment updated to "cap matches the client". The 409 path at `pool.js:66` unchanged — still the authoritative server check.
+- `sweepstake/store.js` — added `const MAX_PLAYERS = 16` at the top of the IIFE and exported on `window.Store`. `addPlayer` now returns `null` when at the cap (was unconditional). `signUp` throws `"Sign-ups are closed."` if `addPlayer` returns null, so offline mode (`net.js:66-69` local fallback) also fails cleanly instead of nulling `state.me`. `seedPlayers` is unaffected — `DEMO_NAMES.length === 12`, so seeding always fits.
+- `sweepstake/screens1.jsx` — `SignUp` reads `cap = window.Store.MAX_PLAYERS` and `full = state.players.length >= cap`. When `full` and the user isn't already in (`me` branch still hits first), the hero's input+donate block is replaced with a "Sign-ups closed · Pool is full at 16/16 · draw kicks off on <date>" pill. The `Draw day · ... · N signed up so far` mono line now reads `N/16 signed up so far` always (cap visible even pre-fill).
+- `sweepstake/screens2.jsx` — Admin "Players" panel header now reads `Players · N/16`; subtitle flips to "pool full — sign-ups closed" when at cap. Add-by-name input is disabled and placeholder becomes "Pool is full" when at cap; Add button disabled in the same condition.
+
+### Verification done
+None — code-only pass. User should `npx netlify dev` and (a) sign up 16 fake players via Admin and confirm the public SignUp hero swaps to the closed-pill, (b) confirm the Admin Add button greys out at 16/16, (c) clear one player and confirm the form returns.
+
+### Files unchanged
+`net.js` (server error surfaces through existing alert), `app.jsx`, `ui.jsx`, `data.js`, `pool.js` (`sweepstake/`), `styles.css`, `index.html`. Existing signed-up users still see the "You're in the pool" confirmation when the pool fills (the `me` branch in SignUp runs before the `full` check).
+
+### Earlier this session
 **Kickoff display switched from ET to UK local time (BST, UTC+1).**
 
 ### Why
@@ -140,4 +158,4 @@ Untouched (donate/currency/pool infrastructure): `sweepstake/net.js` (`bumpDonat
 - **Self-host flag images** if offline robustness matters.
 
 ## Next step
-User runs `npx netlify dev` and spot-checks: (a) Today view shows real matchups for each day Jun 11 → Jun 27 with `HH:MM ET` (and `(+1)` for late-night ones); (b) Admin "Enter results" dropdown lists all 17 days; (c) day 3 fixture order is QAT-SUI / BRA-MAR / HAI-SCO / AUS-TUR (00:00 +1). Once happy, commit `sweepstake/data.js`, `sweepstake/screens1.jsx`, `PROGRESS.md`.
+User runs `npx netlify dev` and spot-checks the new 16-player cap: (a) public SignUp hero swaps to the "Sign-ups closed · 16/16" pill when full; (b) Admin Players panel header shows `N/16` and the Add input/button disable at the cap. Once happy, commit `netlify/functions/pool.js`, `sweepstake/store.js`, `sweepstake/screens1.jsx`, `sweepstake/screens2.jsx`, `PROGRESS.md`.

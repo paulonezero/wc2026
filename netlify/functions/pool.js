@@ -8,7 +8,7 @@ import { getStore } from "@netlify/blobs";
 
 const PALETTE = ["#FF2E63", "#2347FF", "#16A34A", "#FFB22E", "#9333EA", "#06B6D4",
                  "#EC4899", "#0EA5E9", "#F97316", "#65A30D", "#DC2626", "#0D9488"];
-const MAX_PLAYERS = 24; // hard ceiling, never surfaced in the UI
+const MAX_PLAYERS = 16; // cap matches the client; sign-ups close once reached
 
 const adminPassword = () => process.env.ADMIN_PASSWORD || "2026";
 

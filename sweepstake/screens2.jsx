@@ -283,8 +283,10 @@ function Admin({ state, update, go }) {
           {/* players */}
           <div className="panel">
             <div className="row" style={{ justifyContent: "space-between" }}>
-              <div className="kept">Players · {state.players.length}</div>
-              <div className="mono muted" style={{ fontSize: 12 }}>seed, add or clear before the draw</div>
+              <div className="kept">Players · {state.players.length}/{window.Store.MAX_PLAYERS}</div>
+              <div className="mono muted" style={{ fontSize: 12 }}>
+                {state.players.length >= window.Store.MAX_PLAYERS ? "pool full — sign-ups closed" : "seed, add or clear before the draw"}
+              </div>
             </div>
 
             {state.players.length === 0
@@ -305,11 +307,12 @@ function Admin({ state, update, go }) {
                 </div>}
 
             <div className="row" style={{ gap: 8, marginTop: 14 }}>
-              <input className="field" placeholder="Add a player by name…" value={newName}
+              <input className="field" placeholder={state.players.length >= window.Store.MAX_PLAYERS ? "Pool is full" : "Add a player by name…"} value={newName}
                 onChange={e => setNewName(e.target.value)}
                 onKeyDown={e => e.key === "Enter" && addOne()}
+                disabled={state.players.length >= window.Store.MAX_PLAYERS}
                 style={{ flex: 1, minWidth: 0 }} />
-              <Btn kind="blue" size="sm" onClick={addOne} disabled={!newName.trim()}>Add</Btn>
+              <Btn kind="blue" size="sm" onClick={addOne} disabled={!newName.trim() || state.players.length >= window.Store.MAX_PLAYERS}>Add</Btn>
             </div>
 
             <div className="row" style={{ gap: 10, marginTop: 12, flexWrap: "wrap" }}>

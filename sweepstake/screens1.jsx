@@ -49,6 +49,8 @@ function SignUp({ state, onJoin, onForget, go }) {
   const counts = splitCounts(Math.max(1, state.players.length));
   const eachText = state.players.length ? `${Math.min(...counts)}–${Math.max(...counts)}` : "4";
   const days = Math.max(0, Math.round((dateForDay(1) - new Date("2026-06-10T00:00:00")) / 8.64e7));
+  const cap = window.Store.MAX_PLAYERS;
+  const full = state.players.length >= cap;
 
   function join() {
     const n = name.trim(); if (!n) return;
@@ -138,21 +140,33 @@ function SignUp({ state, onJoin, onForget, go }) {
           One username, that's it — no passwords, no faff. You'll be dealt a handful of teams at the draw.
           Own the team that goes furthest and the {state.currency}{state.pot || "?"} pot is yours.
         </div>
-        <div style={{ marginTop: 24, display: "flex", gap: 10, maxWidth: 480 }}>
-          <input className="field" placeholder="Pick a username…" value={name}
-                 style={{ background: "rgba(255,255,255,.07)", color: "#fff", borderColor: "rgba(255,255,255,.18)" }}
-                 onChange={e => setName(e.target.value)} onKeyDown={e => e.key === "Enter" && join()} />
-          <Btn kind="primary" onClick={join} disabled={!name.trim()}>I'm in →</Btn>
-        </div>
-        <div style={{ marginTop: 14 }}>
-          <Btn kind="gold" size="sm" onClick={() => { window.Net.bumpDonate(name.trim()); setGotcha(true); }} disabled={!name.trim()}
-               style={{ whiteSpace: "normal", textAlign: "left", lineHeight: 1.25, maxWidth: 480 }}>
-            <span style={{ marginRight: 8, fontSize: "1.1em", verticalAlign: "-1px" }}>🥷</span>
-            Psst… donate to Paul's Revolut for a better set of teams
-          </Btn>
-        </div>
+        {full
+          ? <div style={{ marginTop: 24, maxWidth: 480, padding: "18px 20px", borderRadius: 12,
+              background: "rgba(255,255,255,.06)", border: "1px solid rgba(255,255,255,.18)" }}>
+              <div className="display" style={{ fontSize: 22, textTransform: "uppercase", color: "var(--pop)" }}>
+                Sign-ups closed
+              </div>
+              <div style={{ color: "#D8CFBE", marginTop: 6, fontSize: 14.5, lineHeight: 1.5 }}>
+                Pool is full at {cap}/{cap}. The draw kicks off on <b style={{ color: "#fff" }}>{fmtDate(1)}</b> — check back then for results.
+              </div>
+            </div>
+          : <>
+              <div style={{ marginTop: 24, display: "flex", gap: 10, maxWidth: 480 }}>
+                <input className="field" placeholder="Pick a username…" value={name}
+                       style={{ background: "rgba(255,255,255,.07)", color: "#fff", borderColor: "rgba(255,255,255,.18)" }}
+                       onChange={e => setName(e.target.value)} onKeyDown={e => e.key === "Enter" && join()} />
+                <Btn kind="primary" onClick={join} disabled={!name.trim()}>I'm in →</Btn>
+              </div>
+              <div style={{ marginTop: 14 }}>
+                <Btn kind="gold" size="sm" onClick={() => { window.Net.bumpDonate(name.trim()); setGotcha(true); }} disabled={!name.trim()}
+                     style={{ whiteSpace: "normal", textAlign: "left", lineHeight: 1.25, maxWidth: 480 }}>
+                  <span style={{ marginRight: 8, fontSize: "1.1em", verticalAlign: "-1px" }}>🥷</span>
+                  Psst… donate to Paul's Revolut for a better set of teams
+                </Btn>
+              </div>
+            </>}
         <div className="mono" style={{ color: "#8A8170", fontSize: 12.5, marginTop: 12 }}>
-          Draw day · {fmtDate(1)} · {state.players.length} signed up so far
+          Draw day · {fmtDate(1)} · {state.players.length}/{cap} signed up so far
         </div>
         <div style={{ position:"absolute", right:-40, top:-40, width:220, height:220, borderRadius:"50%",
           border:"1px solid rgba(255,255,255,.08)" }}></div>

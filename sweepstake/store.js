@@ -5,6 +5,7 @@
   "use strict";
   const { TEAMS, FIXTURES, mockScore } = window.SS;
   const KEY = "ss_wc26_v2";
+  const MAX_PLAYERS = 16;        // sign-ups close once the pool is full
 
   const AVA = ["#FF2E63","#2347FF","#16A34A","#FFB22E","#9333EA","#06B6D4",
                "#EC4899","#0EA5E9","#F97316","#65A30D","#DC2626","#0D9488"];
@@ -41,6 +42,7 @@
 
   /* ---- players & sign-up ------------------------------------------------ */
   function addPlayer(state, name) {
+    if (state.players.length >= MAX_PLAYERS) return null;
     const id = "p" + Date.now() + Math.floor(Math.random() * 999);
     const color = AVA[state.players.length % AVA.length];
     state.players.push({ id, name: name.trim(), color, joinedAt: Date.now() });
@@ -48,6 +50,7 @@
   }
   function signUp(state, name) {
     const id = addPlayer(state, name);
+    if (!id) throw new Error("Sign-ups are closed.");
     state.me = id;             // remember this device's player
     return id;
   }
@@ -184,7 +187,7 @@
   }
 
   window.Store = {
-    KEY, AVA, defaultState, load, save, freshTeams,
+    KEY, AVA, MAX_PLAYERS, defaultState, load, save, freshTeams,
     addPlayer, signUp, removePlayer, computeDraw, computeTiers, commitDraw, commitManualDraw,
     recordFixtureScore, advanceDay, setTeamStatus, demoState, reset, shuffle,
     seedPlayers, clearPlayers,
