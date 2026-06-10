@@ -5,10 +5,38 @@ const { TEAMS: TM, GROUP_LETTERS, fixturesOnDay, fmtDate, dateForDay, fmtPct: pc
         ownerOf, teamByCode, teamsOfPlayer, splitCounts, TOTAL_DAYS } = window.SS;
 
 /* ========================================================================== */
+/*  CHEAT MODAL — the joke overlay for the "Donate to Paul's Revolut" button  */
+/* ========================================================================== */
+function CheatModal({ onClose }) {
+  useEffect(() => {
+    const onKey = e => { if (e.key === "Escape") onClose(); };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [onClose]);
+  return (
+    <div onClick={onClose} style={{ position: "fixed", inset: 0, background: "rgba(14,27,35,.62)",
+      zIndex: 50, display: "flex", alignItems: "center", justifyContent: "center", padding: 20 }}>
+      <div onClick={e => e.stopPropagation()} className="panel fadein"
+           style={{ maxWidth: 440, width: "100%", textAlign: "center", padding: "36px 32px" }}>
+        <div className="kept" style={{ color: "var(--red)" }}>Busted</div>
+        <div className="display" style={{ fontSize: 40, textTransform: "uppercase", margin: "8px 0 10px" }}>Nice try.</div>
+        <div className="muted" style={{ fontSize: 15.5, lineHeight: 1.55, maxWidth: 340, margin: "0 auto" }}>
+          Cheating attempt logged :)
+        </div>
+        <div className="row" style={{ justifyContent: "center", marginTop: 22 }}>
+          <Btn kind="ink" onClick={onClose}>Fair enough →</Btn>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/* ========================================================================== */
 /*  SIGN UP — the front door                                                  */
 /* ========================================================================== */
 function SignUp({ state, onJoin, onForget, go }) {
   const [name, setName] = useState("");
+  const [gotcha, setGotcha] = useState(false);
   const me = state.me ? state.players.find(p => p.id === state.me) : null;
   const counts = splitCounts(Math.max(1, state.players.length));
   const eachText = state.players.length ? `${Math.min(...counts)}–${Math.max(...counts)}` : "4";
@@ -108,6 +136,11 @@ function SignUp({ state, onJoin, onForget, go }) {
                  onChange={e => setName(e.target.value)} onKeyDown={e => e.key === "Enter" && join()} />
           <Btn kind="primary" onClick={join} disabled={!name.trim()}>I'm in →</Btn>
         </div>
+        <div style={{ marginTop: 14 }}>
+          <Btn kind="gold" size="sm" onClick={() => setGotcha(true)} disabled={!name.trim()}>
+            Donate to Paul's Revolut for a better set of teams
+          </Btn>
+        </div>
         <div className="mono" style={{ color: "#8A8170", fontSize: 12.5, marginTop: 12 }}>
           Draw day · {fmtDate(1)} · {state.players.length} signed up so far
         </div>
@@ -125,6 +158,8 @@ function SignUp({ state, onJoin, onForget, go }) {
         : <div className="card" style={{ padding: 16, display: "flex", flexWrap: "wrap", gap: 12 }}>
             {state.players.map(p => <Owner key={p.id} player={p} size={28} />)}
           </div>}
+
+      {gotcha && <CheatModal onClose={() => { setGotcha(false); join(); }} />}
     </div>
   );
 }
