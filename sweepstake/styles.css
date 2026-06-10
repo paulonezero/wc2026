@@ -1,0 +1,184 @@
+/* ============================================================================
+   TOUCHLINE · WORLD CUP 2026 SWEEPSTAKE — stylesheet
+   Editorial-sport theme: cool light canvas, deep-navy feature cards,
+   pitch-green + trophy-gold accents, hairline borders, soft elevation.
+   (--ink = dark text/borders AND dark feature-card fills; --paper = light.)
+   ========================================================================== */
+:root{
+  --paper:#ECF0EE; --paper-2:#E2E7E4; --paper-3:#D5DCD8;
+  --ink:#0E1B23; --ink-soft:#5C6B71; --ink-faint:#9AA6AA;
+  --pop:#0E9E55; --green:#138A4E; --lime:#27C06E;
+  --blue:#1D6FB8; --gold:#C99A3F; --red:#D7372B;
+  --navy:#0E1B23; --line:rgba(15,28,36,.12);
+  --card:#FFFFFF;
+  --shadow:0 14px 36px -16px rgba(10,22,28,.42), 0 2px 6px rgba(10,22,28,.05);
+  --shadow-sm:0 6px 18px -8px rgba(10,22,28,.32);
+  --r:14px;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{height:100%}
+body{
+  background:var(--paper);
+  background-image:radial-gradient(130% 90% at 50% -12%, rgba(14,158,85,.07), transparent 58%);
+  color:var(--ink);
+  font-family:"Hanken Grotesque",system-ui,sans-serif;
+  -webkit-font-smoothing:antialiased;
+}
+#root{min-height:100%}
+.display{font-family:"Archivo","Hanken Grotesque",sans-serif;font-weight:800;letter-spacing:-.02em;line-height:.98}
+.mono{font-family:"DM Mono",monospace}
+button{font-family:inherit}
+::selection{background:rgba(14,158,85,.22)}
+
+/* ---- app shell -------------------------------------------------------- */
+.app{max-width:1180px;margin:0 auto;padding:0 24px 120px}
+.topbar{display:flex;align-items:center;gap:16px;padding:20px 0 16px;position:sticky;top:0;z-index:40;
+  background:linear-gradient(var(--paper) 82%,transparent);backdrop-filter:blur(6px)}
+.brand{display:flex;align-items:center;gap:12px;cursor:pointer;user-select:none}
+.brand .mark{width:42px;height:42px;border-radius:11px;background:var(--navy);color:var(--lime);
+  display:flex;align-items:center;justify-content:center;box-shadow:var(--shadow-sm);flex:none}
+.brand .bt{font-family:"Archivo";font-weight:800;font-size:20px;line-height:1;text-transform:uppercase;letter-spacing:.03em}
+.brand .bt small{display:block;font-family:"DM Mono",monospace;font-weight:400;font-size:9.5px;
+  letter-spacing:.2em;color:var(--ink-soft);text-transform:uppercase;margin-top:3px}
+.potchip{margin-left:auto;display:flex;align-items:center;gap:9px;background:var(--card);border:1px solid var(--line);
+  border-radius:11px;padding:8px 15px;box-shadow:var(--shadow-sm)}
+.potchip .pl{font-family:"DM Mono",monospace;font-size:9.5px;letter-spacing:.16em;text-transform:uppercase;color:var(--ink-soft)}
+.potchip .pv{font-family:"Archivo";font-weight:800;font-size:19px;color:var(--gold)}
+.hostbtn{margin-left:10px;display:inline-flex;align-items:center;gap:7px;font-family:"Archivo";font-weight:700;
+  font-size:12px;text-transform:uppercase;letter-spacing:.06em;color:var(--ink-soft);background:var(--card);
+  border:1px solid var(--line);border-radius:10px;padding:9px 13px;cursor:pointer;box-shadow:var(--shadow-sm);transition:.14s}
+.hostbtn:hover{color:var(--ink);border-color:var(--ink-faint)}
+.hostbtn.on{background:var(--navy);color:#fff;border-color:var(--navy)}
+.hostdot{width:7px;height:7px;border-radius:50%;background:var(--lime);box-shadow:0 0 0 3px rgba(39,192,110,.25)}
+
+/* ---- tabs (underline indicator) -------------------------------------- */
+.tabs{display:flex;gap:2px;flex-wrap:wrap;border-bottom:1px solid var(--line);margin-bottom:28px}
+.tab{font-family:"Archivo";font-weight:700;font-size:13.5px;text-transform:uppercase;letter-spacing:.05em;
+  border:none;background:transparent;color:var(--ink-soft);padding:13px 16px;cursor:pointer;position:relative;transition:.14s}
+.tab:hover{color:var(--ink)}
+.tab.on{color:var(--ink)}
+.tab.on::after{content:"";position:absolute;left:14px;right:14px;bottom:-1px;height:3px;border-radius:3px 3px 0 0;background:var(--pop)}
+.tab .dot{display:inline-block;width:7px;height:7px;border-radius:50%;background:var(--red);margin-left:6px;vertical-align:middle}
+
+/* ---- buttons ---------------------------------------------------------- */
+.btn{font-family:"Archivo";font-weight:700;font-size:14px;border:1px solid transparent;
+  border-radius:10px;padding:12px 20px;cursor:pointer;box-shadow:var(--shadow-sm);
+  transition:transform .12s,box-shadow .12s,background .12s;text-transform:uppercase;letter-spacing:.04em;white-space:nowrap;
+  display:inline-flex;align-items:center;gap:9px}
+.btn:hover{transform:translateY(-1px);box-shadow:0 10px 22px -10px rgba(10,22,28,.42)}
+.btn:active{transform:translateY(0)}
+.btn:disabled{opacity:.4;cursor:not-allowed;transform:none;box-shadow:none}
+.btn.primary{background:var(--pop);color:#fff}
+.btn.primary:hover{background:#0c8d4b}
+.btn.blue{background:var(--blue);color:#fff}
+.btn.lime{background:var(--lime);color:#06281A}
+.btn.gold{background:var(--gold);color:#1E1604}
+.btn.ink{background:var(--navy);color:var(--paper)}
+.btn.ghost{background:var(--card);color:var(--ink);border-color:var(--line);box-shadow:none}
+.btn.ghost:hover{border-color:var(--ink-faint);box-shadow:var(--shadow-sm)}
+.btn.sm{font-size:12.5px;padding:8px 14px}
+.btn.lg{font-size:16px;padding:15px 26px}
+
+/* ---- cards & bits ----------------------------------------------------- */
+.card{background:var(--card);border:1px solid var(--line);border-radius:var(--r);box-shadow:var(--shadow)}
+.panel{background:var(--card);border:1px solid var(--line);border-radius:var(--r);box-shadow:var(--shadow);padding:22px}
+.kept{font-family:"DM Mono",monospace;font-size:10.5px;letter-spacing:.2em;text-transform:uppercase;color:var(--ink-soft)}
+.sectlabel{font-family:"DM Mono",monospace;font-size:11px;letter-spacing:.2em;text-transform:uppercase;color:var(--ink-soft);
+  display:flex;align-items:center;gap:12px;margin:6px 0 16px}
+.sectlabel::after{content:"";flex:1;height:1px;background:var(--line)}
+.tag{font-family:"DM Mono",monospace;font-size:10.5px;border:1px solid var(--line);border-radius:6px;padding:3px 9px;
+  background:var(--paper-2);text-transform:uppercase;letter-spacing:.08em;color:var(--ink-soft);white-space:nowrap}
+
+/* ---- crest (real flag block) ------------------------------------------ */
+.crest{border-radius:8px;border:1px solid rgba(15,28,36,.14);display:flex;align-items:flex-end;
+  padding:8px;position:relative;overflow:hidden}
+.crest .flagimg{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;z-index:0}
+.crest::after{content:"";position:absolute;inset:0;z-index:1;
+  background:linear-gradient(0deg, rgba(8,16,20,.55), rgba(8,16,20,0) 52%)}
+.crest .ccode{font-family:"Archivo";font-weight:800;line-height:.78;position:relative;z-index:2;letter-spacing:.02em;
+  color:#fff;text-shadow:0 1px 4px rgba(0,0,0,.55)}
+
+.sticker{position:relative;background:var(--card);border:1px solid var(--line);border-radius:12px;padding:12px;
+  box-shadow:var(--shadow-sm);overflow:hidden;transition:transform .14s,box-shadow .14s}
+.sticker.hov:hover{transform:translateY(-3px);box-shadow:var(--shadow)}
+.sticker .nm{font-family:"Archivo";font-weight:800;font-size:16px;margin-top:10px;text-transform:uppercase;
+  letter-spacing:-.005em;line-height:1}
+.sticker .meta{display:flex;justify-content:space-between;align-items:center;margin-top:8px;
+  font-family:"DM Mono",monospace;font-size:11px;color:var(--ink-soft)}
+.sticker .odd{background:var(--paper-2);border:1px solid var(--line);border-radius:6px;padding:2px 8px;
+  font-weight:500;color:var(--ink)}
+.sticker .rank{position:absolute;top:9px;right:9px;min-width:26px;height:24px;padding:0 7px;border-radius:6px;
+  background:var(--navy);color:#fff;display:flex;align-items:center;justify-content:center;
+  font-family:"DM Mono",monospace;font-size:11px;z-index:3}
+.sticker .ownerbadge{position:absolute;top:9px;left:9px;z-index:3}
+.sticker.foil{border-color:var(--gold)}
+.sticker.foil .odd{background:var(--gold);border-color:var(--gold);color:#1E1604}
+.sticker.foil::before{content:"★";position:absolute;top:8px;right:9px;z-index:4;color:var(--gold);font-size:14px}
+.sticker.out{opacity:.6}
+.sticker.out .crest{filter:grayscale(.92)}
+.sticker.out .odd{background:var(--paper-3);text-decoration:line-through;color:var(--ink-faint)}
+.sticker.out .crest::after{content:"";position:absolute;inset:0;z-index:4;
+  background:repeating-linear-gradient(45deg,transparent 0 7px,rgba(15,28,36,.12) 7px 9px)}
+
+/* ---- avatar ----------------------------------------------------------- */
+.ava{border-radius:50%;border:1.5px solid rgba(255,255,255,.5);display:flex;align-items:center;justify-content:center;
+  font-family:"Archivo";font-weight:800;color:#fff;flex:none;box-shadow:var(--shadow-sm)}
+
+/* ---- chips row (small flag tiles) ------------------------------------- */
+.teamchips{display:flex;gap:5px;flex-wrap:wrap}
+.tchip{height:20px;width:28px;border-radius:4px;border:1px solid var(--line);display:inline-flex;align-items:center;
+  justify-content:center;overflow:hidden;position:relative;background:var(--paper-2)}
+.tchip .flagimg{position:absolute;inset:0;width:100%;height:100%;object-fit:cover}
+.tchip-code{position:relative;z-index:2;font-family:"DM Mono",monospace;font-size:8px;font-weight:500;color:#fff;
+  text-shadow:0 1px 2px rgba(0,0,0,.7)}
+.tchip.dead{filter:grayscale(1);opacity:.4}
+
+/* ---- progress / odds bars --------------------------------------------- */
+.bar{height:9px;border-radius:999px;background:var(--paper-2);overflow:hidden}
+.bar > i{display:block;height:100%;background:var(--pop);border-radius:999px;
+  transition:width .6s cubic-bezier(.2,.8,.2,1)}
+
+/* ---- inputs ----------------------------------------------------------- */
+.field{font-family:"Hanken Grotesque";font-size:15px;border:1px solid var(--line);border-radius:10px;
+  padding:11px 14px;background:var(--card);width:100%;transition:border-color .14s,box-shadow .14s;color:inherit}
+.field:focus{outline:none;border-color:var(--pop);box-shadow:0 0 0 3px rgba(14,158,85,.16)}
+select.field{appearance:none;cursor:pointer}
+label.lbl{font-family:"DM Mono",monospace;font-size:10.5px;letter-spacing:.14em;text-transform:uppercase;
+  color:var(--ink-soft);display:block;margin-bottom:6px}
+
+/* ---- confetti --------------------------------------------------------- */
+.confetti-pc{position:fixed;width:10px;height:14px;z-index:200;pointer-events:none;top:-20px;border-radius:2px}
+
+/* ---- helpers ---------------------------------------------------------- */
+.row{display:flex;align-items:center}
+.muted{color:var(--ink-soft)}
+.center{display:flex;align-items:center;justify-content:center}
+.fadein{animation:fadein .4s ease}
+@media (prefers-reduced-motion:reduce){.fadein{animation:none}}
+@keyframes fadein{from{opacity:.4;transform:translateY(8px)}to{opacity:1;transform:none}}
+@keyframes pop{0%{transform:scale(.7)}60%{transform:scale(1.05)}100%{transform:scale(1)}}
+.reveal-pop{animation:pop .42s cubic-bezier(.2,1.2,.4,1)}
+
+/* ---- sign-up steps ---------------------------------------------------- */
+.steps{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin:26px 0 18px}
+.step{border:1px solid var(--line);border-radius:12px;padding:16px 13px;background:var(--paper-2);text-align:center}
+.step-n{width:28px;height:28px;border-radius:8px;background:var(--pop);color:#fff;display:flex;align-items:center;
+  justify-content:center;font-family:"Archivo";font-weight:800;font-size:14px;margin:0 auto}
+.linkbtn{background:none;border:none;font-family:"DM Mono",monospace;font-size:12px;color:var(--ink-soft);
+  text-decoration:underline;cursor:pointer;margin-top:10px;letter-spacing:.04em}
+.linkbtn:hover{color:var(--ink)}
+
+/* ---- match / result rows ---------------------------------------------- */
+.matchrow{display:grid;grid-template-columns:1fr 78px 1fr;align-items:center;gap:10px;padding:13px 14px;
+  border-bottom:1px solid var(--line)}
+.matchrow:last-child{border-bottom:none}
+.mt-side{display:flex;flex-direction:column;min-width:0}
+.mt-mid{display:flex;flex-direction:column;align-items:center}
+.scorebox{font-family:"Archivo";font-weight:800;font-size:24px;line-height:1;display:flex;align-items:center;gap:6px}
+.scorebox span{font-size:15px;opacity:.35}
+.scorebox.live{color:var(--pop)}
+.kotime{font-family:"DM Mono",monospace;font-size:14px;font-weight:500;background:var(--paper-2);border:1px solid var(--line);
+  border-radius:7px;padding:5px 11px;color:var(--ink-soft)}
+.upset{font-family:"DM Mono",monospace;font-size:9px;letter-spacing:.08em;text-transform:uppercase;color:#fff;
+  background:var(--red);border-radius:5px;padding:2px 7px;margin-top:5px}
+.score-in{width:46px;text-align:center;padding:8px 4px;font-family:"Archivo";font-weight:800;font-size:16px}

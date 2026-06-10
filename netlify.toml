@@ -1,0 +1,18 @@
+# Netlify config for WC2026 SS
+# Static site + one serverless function (shared pool via Netlify Blobs).
+
+[build]
+  publish = "."
+  functions = "netlify/functions"
+
+# Client calls /api/pool; the function also declares this path itself,
+# this redirect is a belt-and-braces mapping.
+[[redirects]]
+  from = "/api/pool"
+  to = "/.netlify/functions/pool"
+  status = 200
+
+[[headers]]
+  for = "/sweepstake/*"
+  [headers.values]
+    Cache-Control = "public, max-age=3600"
