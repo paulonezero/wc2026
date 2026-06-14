@@ -201,10 +201,25 @@ function Teams({ state, go }) {
 /* ========================================================================== */
 /*  ADMIN — host desk                                                         */
 /* ========================================================================== */
-function Admin({ state, update, go }) {
+function Admin({ state, update, go, token }) {
   const [adminDay, setAdminDay] = useState(state.currentDay);
   const [newName, setNewName] = useState("");
   const [picks, setPicks] = useState(() => ({ ...(state.draw.assignments || {}) }));
+  const [fetchBusy, setFetchBusy] = useState(false);
+  const [fetchResult, setFetchResult] = useState(null);
+
+  async function fetchResultsNow() {
+    if (!token) { window.alert("Host login expired — re-enter the access code."); return; }
+    setFetchBusy(true); setFetchResult(null);
+    try {
+      const r = await window.Net.fetchResultsNow(token);
+      setFetchResult(r);
+    } catch (e) {
+      setFetchResult({ ok: false, error: e.message || "Fetch failed" });
+    } finally {
+      setFetchBusy(false);
+    }
+  }
   const dayFx = fxDay(adminDay);
   const pickCounts = useMemo(() => {
     const c = {}; Object.values(picks).forEach(pid => { if (pid) c[pid] = (c[pid] || 0) + 1; }); return c;
@@ -460,14 +475,42 @@ function Admin({ state, update, go }) {
             </div>
           </div>
 
-          {/* future api */}
+          {/* results source */}
           <div className="panel" style={{ background: "var(--ink)", color: "var(--paper)" }}>
             <div className="kept" style={{ color: "var(--lime)" }}>Results source</div>
             <div style={{ marginTop: 10, fontSize: 14, color: "#E2D9C7", lineHeight: 1.55 }}>
-              Currently <b style={{ color: "#fff" }}>manual entry</b>. Results live in a clean fixtures schema (day · round · teams · score),
-              so a live API feed can be wired in later without touching the rest of the app.
+              <b style={{ color: "#fff" }}>Auto-fetch from football-data.org</b> runs every 2 hours. Finished matches
+              overwrite whatever's in <b style={{ color: "#fff" }}>Enter results</b> above. Use the button below to pull
+              right now without waiting for the next tick.
             </div>
-            <Btn kind="ghost" disabled style={{ marginTop: 14 }}>Connect API feed — coming soon</Btn>
+            <div className="row" style={{ gap: 10, marginTop: 14, alignItems: "center" }}>
+              <Btn kind="lime" size="sm" onClick={fetchResultsNow} disabled={fetchBusy || state.mode !== "remote"}>
+                {fetchBusy ? "Fetching…" : "Fetch results now"}
+              </Btn>
+              {state.mode !== "remote" && (
+                <span className="mono" style={{ fontSize: 12, color: "#E2D9C7", opacity: .7 }}>
+                  (deployed site only — disabled in local/offline mode)
+                </span>
+              )}
+            </div>
+            {fetchResult && (
+              <div className="mono" style={{
+                marginTop: 12, padding: "10px 12px", borderRadius: 8, fontSize: 12.5, lineHeight: 1.5,
+                background: fetchResult.ok ? "rgba(166,255,89,.08)" : "rgba(255,100,100,.10)",
+                border: `1px solid ${fetchResult.ok ? "rgba(166,255,89,.35)" : "rgba(255,100,100,.45)"}`,
+                color: "#fff", whiteSpace: "pre-wrap",
+              }}>
+                {fetchResult.ok
+                  ? `OK · ${fetchResult.scoresWritten} score${fetchResult.scoresWritten === 1 ? "" : "s"} written · ${fetchResult.eliminations || 0} elimination${fetchResult.eliminations === 1 ? "" : "s"} · ${fetchResult.warnings || 0} warning${fetchResult.warnings === 1 ? "" : "s"}`
+                  : `Failed: ${fetchResult.error || "unknown error"}`}
+                {fetchResult.ok && fetchResult.details?.warnings?.length > 0 && (
+                  <div style={{ marginTop: 8, opacity: .85 }}>
+                    {fetchResult.details.warnings.slice(0, 6).map((w, i) => <div key={i}>• {w}</div>)}
+                    {fetchResult.details.warnings.length > 6 && <div>• …and {fetchResult.details.warnings.length - 6} more</div>}
+                  </div>
+                )}
+              </div>
+            )}
           </div>
 
           {/* pool settings */}

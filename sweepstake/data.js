@@ -94,7 +94,9 @@
      (00:00–05:00 ET) with the PREVIOUS matchday, so e.g. day 3 (Sat 13 Jun)
      includes AUS-TUR at 00:00 ET (= 05:00 BST Sun morning, shown with `(+1)`).
      `koSortKey()` rolls AM hours past midnight so the day's matches sort in
-     chronological play order.                                              */
+     chronological play order.
+     NOTE: when editing FIXTURES, also update /netlify/functions/_fixturesIndex.js
+     (server-side copy used by the auto-results ingestor).                  */
   const TOURNAMENT_START = "2026-06-11";
   const TOTAL_DAYS = 17;
   // legacy export — no longer drives fixture generation, kept for compat

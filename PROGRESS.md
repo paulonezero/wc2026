@@ -4,6 +4,37 @@
 Ship the v1 sweepstake app in time for draw day on **2026-06-11**. The app is already deployed; ongoing work is incremental polish.
 
 ## Most recent change
+**Auto-results: Netlify Scheduled Function pulls finished matches from football-data.org every 2 hours and merges them into the pool blob.**
+
+### Why
+Match scores currently require the host to log in to Admin and type each one into "Enter results". User wants results to land automatically so players see them in near-real-time (existing 20s client poll picks up the new blob). Chose football-data.org free tier (API key, 10 req/min cap — we use 12 req/day). Conflict policy is **always overwrite** existing `state.scores[id]` — manual entries get replaced on the next 2h tick. Knockout-round losses also auto-mark losing team as eliminated (`state.teams[code] = {status:"out", eliminatedRound}`); group losses don't eliminate.
+
+### Files touched
+- `netlify/functions/fetch-results.js` (new) — scheduled + manual HTTP handler. `export const config = { schedule: "0 */2 * * *", path: "/api/fetch-results" }`. Reuses the same `getStore("wc26ss") / "pool"` blob `pool.js` uses. POST invocations require admin password; scheduled invocations skip auth. Skips matches unless `status === "FINISHED"` to avoid mid-match flicker (form calc replays scores deterministically). KO stages (`ROUND_OF_16` … `THIRD_PLACE`) drive eliminations only — no KO scores written until KO fixtures are added to FIXTURES. Returns `{ ok, scoresWritten, eliminations, warnings, details, at }` and `console.log`s a summary.
+- `netlify/functions/_teamMap.js` (new) — football-data English name → 3-letter code. Includes defensive aliases (Turkey/Türkiye, USA/United States, South Korea/Korea Republic, Iran/IR Iran, Côte d'Ivoire/Ivory Coast, Cape Verde/Cabo Verde, Curaçao/Curacao, Czechia/Czech Republic, DR Congo/Democratic Republic of the Congo, Bosnia & Herzegovina/Bosnia and Herzegovina).
+- `netlify/functions/_fixturesIndex.js` (new) — 72 `{id, date, home, away}` entries mirroring `data.js:FIXTURES`. Date is the ET-local calendar date of kickoff (late-night 00:00–05:59 ET kickoffs use `day+1` per the koSortKey rule in data.js). Exports `findFixtureId(etDate, home, away)` with a ±1 day fallback for UTC→ET edge cases. Needed because `sweepstake/data.js` is a browser IIFE on `window.SS` and can't be imported from a Netlify function.
+- `sweepstake/data.js` — added one-line note above `FIXTURES` reminding future edits to keep `_fixturesIndex.js` in sync. No code changes.
+- `sweepstake/net.js` — added `fetchResultsNow(password)` helper that POSTs to `/api/fetch-results` and returns the function's summary payload. Throws in local/offline mode (no API key client-side). Exported on `window.Net`.
+- `sweepstake/app.jsx` — passes `token` down to `<Admin />` so the manual-fetch button can authenticate.
+- `sweepstake/screens2.jsx` — replaced the disabled "Connect API feed — coming soon" placeholder in the Admin "Results source" panel with a working **Fetch results now** button (lime). New `fetchBusy`/`fetchResult` local state. On success, renders an inline mono summary box ("OK · N scores written · M eliminations · K warnings") with up to 6 warning details. Button is disabled in local/offline mode. Panel copy updated to describe the auto-fetch cadence + overwrite behaviour.
+
+### How the manual trigger works (host side)
+Admin → "Results source" panel → click **Fetch results now**. Pulls the latest from football-data.org and merges into the pool blob in the same tick. The blob change propagates to all other players' clients within their next 20s poll.
+
+### Verification done
+Node smoke test (`node --input-type=module`) confirmed: `codeFromName("Ivory Coast") === "CIV"`, `codeFromName("Korea Republic") === "KOR"`, `codeFromName("Wakanda") === null`; `FIXTURES_INDEX.length === 72`; `findFixtureId("2026-06-11", "MEX", "RSA") === "gAr0m0"`; late-night `findFixtureId("2026-06-14", "AUS", "TUR") === "gDr0m1"`; ±1 day fallback works (`findFixtureId("2026-06-15", "AUS", "TUR") === "gDr0m1"`); unknown returns `null`. `node --check fetch-results.js` passes.
+
+### Still to do (operator side)
+1. Register at football-data.org and grab a free API key.
+2. In Netlify dashboard → Site settings → Environment variables, set `FOOTBALL_DATA_API_KEY=<key>`. Optionally set `WC_COMPETITION_ID` (defaults to `2000`; check `curl -H "X-Auth-Token: <key>" https://api.football-data.org/v4/competitions | jq '.competitions[] | select(.code=="WC")'` once 2026 is listed).
+3. Deploy. Confirm in Netlify → Functions that `fetch-results` is registered as a scheduled function.
+4. Manual smoke: `curl -X POST https://<site>/api/fetch-results -H 'content-type: application/json' -d '{"password":"<ADMIN_PASSWORD>"}'`. Expect `{ok:true, scoresWritten, eliminations, warnings, details, at}`. Patch `_teamMap.js` for any unknown-team warnings.
+5. Pre-tournament dry run option: locally set `WC_COMPETITION_ID=2021` (Premier League) and run `netlify dev`. Fixture matching will fail (different teams) but every match in `warnings` confirms the fetch path works end-to-end.
+
+### Files unchanged
+`pool.js` (still the only mutation endpoint for human Admin actions — auto-results writes to the same blob alongside it), all `sweepstake/*` files, `netlify.toml` (the function's `export const config.path` makes a redirect unnecessary).
+
+### Earlier this session
 **Sign-ups close at 16 players. Cap surfaced in public SignUp + Admin Players panel; server hard-cap lowered to match.**
 
 ### Why
@@ -152,10 +183,10 @@ Untouched (donate/currency/pool infrastructure): `sweepstake/net.js` (`bumpDonat
 ## Open / future work (from ARCHITECTURE.md §9 + survey)
 - **Reset/clear polish.** ~~Existing "Reset pool" button works (full wipe via debounced `save`). Gaps: no per-player remove UI (helper `Store.removePlayer` at `store.js:54` is unused); no partial reset that keeps pool config;~~ Per-player remove + seed + partial-clear shipped this session. Still missing: no dedicated server `reset` action (the local clearPlayers + debounced save will push the cleared state to the backend).
 - **Knockout-stage fixtures auto-generation.** Currently manual via the "Who's still in" toggle grid (`screens2.jsx:270–286`).
-- **Real results feed.** Disabled placeholder button at `screens2.jsx:328`; integration would just write `state.scores[fixtureId] = {hs, as}` and toggle `teams[code].status`.
+- ~~**Real results feed.** Disabled placeholder button at `screens2.jsx:328`; integration would just write `state.scores[fixtureId] = {hs, as}` and toggle `teams[code].status`.~~ Shipped this session via `netlify/functions/fetch-results.js` (football-data.org, 2h cron). Placeholder button in screens2.jsx still present — could be wired up to POST `/api/fetch-results` for a manual refresh trigger in the Admin UI.
 - **Optimistic concurrency on save** (`pool.js:82–87` is last-write-wins).
 - **Vite migration** if in-browser Babel becomes a constraint.
 - **Self-host flag images** if offline robustness matters.
 
 ## Next step
-User runs `npx netlify dev` and spot-checks the new 16-player cap: (a) public SignUp hero swaps to the "Sign-ups closed · 16/16" pill when full; (b) Admin Players panel header shows `N/16` and the Add input/button disable at the cap. Once happy, commit `netlify/functions/pool.js`, `sweepstake/store.js`, `sweepstake/screens1.jsx`, `sweepstake/screens2.jsx`, `PROGRESS.md`.
+Operator: register at football-data.org, set `FOOTBALL_DATA_API_KEY` (and optionally `WC_COMPETITION_ID`) in Netlify env, deploy, then trigger `POST /api/fetch-results` with the admin password and inspect `warnings`. Patch `_teamMap.js` for any unknown team names that show up. Once verified, commit `netlify/functions/fetch-results.js`, `netlify/functions/_teamMap.js`, `netlify/functions/_fixturesIndex.js`, `sweepstake/data.js`, `PROGRESS.md`.
