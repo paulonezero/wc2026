@@ -99,6 +99,25 @@
     return data;
   }
 
+  // Trigger the daily-snippet generator on demand. Returns the function's
+  // summary payload ({ ok, snippet: {...meta}, dispatch, state, at }). The
+  // server has already persisted the new snippet onto state.snippet by the
+  // time this resolves, so callers should swap their local state with
+  // r.state so the snippet appears immediately without waiting for the next
+  // 20s poll.
+  async function generateSnippetNow(password) {
+    if (_mode !== "remote") throw new Error("Snippet generation only works on the deployed site.");
+    const r = await fetch("/api/generate-snippet", {
+      method: "POST",
+      headers: { "content-type": "application/json", "accept": "application/json" },
+      body: JSON.stringify({ password }),
+    });
+    let data = {};
+    try { data = await r.json(); } catch (e) {}
+    if (!r.ok) { const err = new Error(data.error || ("HTTP " + r.status)); err.status = r.status; throw err; }
+    return data;
+  }
+
   // Diff football-data's tournament squad list against our _teamMap.js, to
   // catch unmapped team names BEFORE the live results ingest silently warns.
   async function validateTeams(password) {
@@ -122,5 +141,5 @@
     return String(password) === String((state && state.adminPin) || "2026");
   }
 
-  window.Net = { init, getState, signup, save, verify, bumpDonate, fetchResultsNow, validateTeams, normalize, getMode: () => _mode };
+  window.Net = { init, getState, signup, save, verify, bumpDonate, fetchResultsNow, generateSnippetNow, validateTeams, normalize, getMode: () => _mode };
 })();

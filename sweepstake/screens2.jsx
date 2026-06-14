@@ -209,6 +209,8 @@ function Admin({ state, update, go, token, replaceState }) {
   const [fetchResult, setFetchResult] = useState(null);
   const [validateBusy, setValidateBusy] = useState(false);
   const [validateResult, setValidateResult] = useState(null);
+  const [snippetBusy, setSnippetBusy] = useState(false);
+  const [snippetResult, setSnippetResult] = useState(null);
 
   async function fetchResultsNow() {
     if (!token) { window.alert("Host login expired — re-enter the access code."); return; }
@@ -236,6 +238,20 @@ function Admin({ state, update, go, token, replaceState }) {
       setValidateResult({ ok: false, error: e.message || "Validation failed" });
     } finally {
       setValidateBusy(false);
+    }
+  }
+
+  async function generateSnippet() {
+    if (!token) { window.alert("Host login expired — re-enter the access code."); return; }
+    setSnippetBusy(true); setSnippetResult(null);
+    try {
+      const r = await window.Net.generateSnippetNow(token);
+      setSnippetResult(r);
+      if (r?.ok && r.state) replaceState(r.state);
+    } catch (e) {
+      setSnippetResult({ ok: false, error: e.message || "Snippet generation failed" });
+    } finally {
+      setSnippetBusy(false);
     }
   }
   const dayFx = fxDay(adminDay);
@@ -558,6 +574,56 @@ function Admin({ state, update, go, token, replaceState }) {
                     {`Note · ${validateResult.missingFromApi.length} code${validateResult.missingFromApi.length === 1 ? "" : "s"} in our map didn't appear in football-data's squad: ${validateResult.missingFromApi.join(", ")}`}
                   </div>
                 )}
+              </div>
+            )}
+          </div>
+
+          {/* morning snippet */}
+          <div className="panel">
+            <div className="row" style={{ justifyContent: "space-between", alignItems: "baseline", flexWrap: "wrap", gap: 8 }}>
+              <div className="kept">Morning snippet</div>
+              {state.snippet?.generatedAt &&
+                <div className="mono muted" style={{ fontSize: 11 }}>
+                  Last: {new Date(state.snippet.generatedAt).toLocaleString("en-GB", { timeZone: "Europe/London", dateStyle: "medium", timeStyle: "short" })}
+                  {state.snippet.source ? ` · ${state.snippet.source}` : ""}
+                </div>}
+            </div>
+            <div style={{ marginTop: 10, fontSize: 14, lineHeight: 1.55, color: "var(--ink-soft)" }}>
+              An AI-written daily write-up of results since 08:00 yesterday UK, persisted on the
+              pool blob so it shows on Today. Auto-runs at 08:00 UK each morning; click below
+              to regenerate now (the window is unchanged — still "since 08:00 yesterday").
+            </div>
+            <div className="row" style={{ gap: 10, marginTop: 14, alignItems: "center", flexWrap: "wrap" }}>
+              <Btn kind="gold" size="sm" onClick={generateSnippet} disabled={snippetBusy || state.mode !== "remote"}>
+                {snippetBusy ? "Generating…" : "Generate snippet now"}
+              </Btn>
+              {state.mode !== "remote" && (
+                <span className="mono muted" style={{ fontSize: 12 }}>
+                  (deployed site only — disabled in local/offline mode)
+                </span>
+              )}
+            </div>
+            {snippetResult && (
+              <div className="mono" style={{
+                marginTop: 12, padding: "10px 12px", borderRadius: 8, fontSize: 12.5, lineHeight: 1.5,
+                background: snippetResult.ok ? "var(--paper-2)" : "rgba(255,100,100,.10)",
+                border: `1px solid ${snippetResult.ok ? "var(--line)" : "rgba(255,100,100,.45)"}`,
+                color: "var(--ink)", whiteSpace: "pre-wrap",
+              }}>
+                {snippetResult.ok
+                  ? snippetResult.skipped
+                    ? `Skipped: ${snippetResult.reason}`
+                    : `OK · ${snippetResult.snippet?.matchIds?.length || 0} match${(snippetResult.snippet?.matchIds?.length || 0) === 1 ? "" : "es"} · model ${snippetResult.snippet?.model || "?"}${snippetResult.dispatch ? ` · dispatch: ${(snippetResult.dispatch.delivered || []).join(", ") || "none"}` : ""}`
+                  : `Failed: ${snippetResult.error || "unknown error"}`}
+              </div>
+            )}
+            {state.snippet?.body && (
+              <div className="card" style={{ marginTop: 12, padding: "12px 14px", background: "var(--paper-2)" }}>
+                <div className="kept" style={{ fontSize: 10 }}>Preview</div>
+                <div style={{ marginTop: 6, fontSize: 13, lineHeight: 1.55, color: "var(--ink)" }}>
+                  {String(state.snippet.body).split(/\n{2,}/).map((p, i) =>
+                    <p key={i} style={{ margin: i === 0 ? 0 : "8px 0 0" }}>{p}</p>)}
+                </div>
               </div>
             )}
           </div>

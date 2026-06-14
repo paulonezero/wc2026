@@ -14,6 +14,8 @@
   // fifa = FIFA points from the 10 Jun 2026 live ranking (football-ranking.com,
   // confirmed against inside.fifa.com last-official-update 1 Apr 2026 + recent
   // friendlies); drives the tiered-draw split and the odds model.
+  // NOTE: when editing TEAMS, also update /netlify/functions/_teamsCatalog.js
+  // (server-side {code → {name, fifa}} mirror used by the morning-snippet generator).
   const TEAMS = [
     // ---- CONMEBOL (6) ----
     T("Argentina","ARG","CONMEBOL",1876,"J","#6CB7E8","#ffffff","ar"),
