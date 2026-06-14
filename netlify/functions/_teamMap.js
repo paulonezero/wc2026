@@ -59,6 +59,7 @@ export const TEAM_NAME_TO_CODE = {
   "Ghana": "GHA",
   "Cape Verde": "CPV",
   "Cabo Verde": "CPV",
+  "Cape Verde Islands": "CPV",
 
   // AFC
   "Japan": "JPN",
