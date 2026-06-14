@@ -3,7 +3,13 @@
 // scheduled and manual paths can never diverge.
 import { getStore } from "@netlify/blobs";
 import { codeFromName } from "./_teamMap.js";
-import { findFixtureId } from "./_fixturesIndex.js";
+import {
+  findFixtureId,
+  FIXTURES_INDEX,
+  fixtureLikelyFinishedAt,
+  GROUP_STAGE_END_ISO,
+  TOURNAMENT_END_ISO,
+} from "./_fixturesIndex.js";
 
 const API_BASE = "https://api.football-data.org/v4";
 const COMP_ID = () => process.env.WC_COMPETITION_ID || "2000"; // FIFA WC 2026
@@ -64,7 +70,27 @@ function decideWinner(score) {
   return "DRAW";
 }
 
-export async function runIngest() {
+// Decide whether there is any group fixture worth fetching right now.
+// Returns { pending, total, nextKickoffMs }. "pending" is the count of
+// fixtures whose kickoff+2.5h has elapsed but state.scores[id] is missing.
+function pendingGroupFixtures(state, nowMs) {
+  let pending = 0;
+  let nextKickoffMs = Infinity;
+  for (const fx of FIXTURES_INDEX) {
+    if (state.scores[fx.id]) continue;
+    if (fixtureLikelyFinishedAt(fx, nowMs)) {
+      pending++;
+    } else {
+      const ko = Date.parse(`${fx.date}T${fx.ko}:00-04:00`);
+      if (ko < nextKickoffMs) nextKickoffMs = ko;
+    }
+  }
+  return { pending, total: FIXTURES_INDEX.length, nextKickoffMs };
+}
+
+// `force=true` (manual admin trigger) bypasses the skip check so the host can
+// always pull on demand.
+export async function runIngest({ force = false } = {}) {
   const apiKey = process.env.FOOTBALL_DATA_API_KEY;
   if (!apiKey) {
     return { ok: false, error: "FOOTBALL_DATA_API_KEY not set", at: new Date().toISOString() };
@@ -74,6 +100,37 @@ export async function runIngest() {
   const state = (await store.get("pool", { type: "json" })) || defaultState();
   state.scores ||= {};
   state.teams ||= {};
+  state.ingest ||= {};
+
+  const nowMs = Date.now();
+  const nowIso = new Date(nowMs).toISOString();
+
+  // Skip-when-nothing-finished: bail before hitting football-data if no group
+  // fixture is likely to have just finished AND we're outside the KO window
+  // (during KO we don't have local fixture data, so we keep polling).
+  if (!force) {
+    const { pending, nextKickoffMs } = pendingGroupFixtures(state, nowMs);
+    const groupOver = nowMs >= Date.parse(GROUP_STAGE_END_ISO);
+    const tournamentOver = nowMs >= Date.parse(TOURNAMENT_END_ISO);
+    const inKoWindow = groupOver && !tournamentOver;
+    if (pending === 0 && !inKoWindow) {
+      const reason = tournamentOver
+        ? "tournament-over"
+        : nextKickoffMs === Infinity
+          ? "all-scored"
+          : "no-fixture-finished-since-last-fetch";
+      state.ingest = {
+        ...state.ingest,
+        lastSkippedAt: nowIso,
+        lastSkipReason: reason,
+        nextKickoffAt: nextKickoffMs === Infinity ? null : new Date(nextKickoffMs).toISOString(),
+      };
+      await store.setJSON("pool", state);
+      const summary = { ok: true, skipped: true, reason, nextKickoffAt: state.ingest.nextKickoffAt, at: nowIso };
+      console.log("[ingest] skip", JSON.stringify(summary));
+      return summary;
+    }
+  }
 
   const url = `${API_BASE}/competitions/${COMP_ID()}/matches`;
   let res;
@@ -143,6 +200,15 @@ export async function runIngest() {
     scoresWritten.push(`${fxId} ${home} ${hs}-${as} ${away}`);
   }
 
+  state.ingest = {
+    ...state.ingest,
+    lastFetchAt: nowIso,
+    lastSuccessAt: nowIso,
+    lastScoresWritten: scoresWritten.length,
+    lastSkippedAt: state.ingest.lastSkippedAt || null,
+    lastSkipReason: null,
+  };
+
   await store.setJSON("pool", state);
 
   const summary = {
@@ -150,7 +216,7 @@ export async function runIngest() {
     scoresWritten: scoresWritten.length,
     eliminations: eliminated.length,
     warnings: warnings.length,
-    at: new Date().toISOString(),
+    at: nowIso,
     details: { scoresWritten, eliminated, warnings },
     state, // returned so the calling client can refresh its local cache
   };

@@ -4,6 +4,39 @@
 Ship the v1 sweepstake app in time for draw day on **2026-06-11**. The app is already deployed; ongoing work is incremental polish.
 
 ## Most recent change
+**Results ingest: bump cron to every 30 min, but skip the football-data call when no fixture has likely finished since last fetch.**
+
+### Why
+Cron was running every 2h regardless of whether anything could have changed — most ticks were no-ops that still burned an API call. Bumping to 30-min ticks gives near-real-time results during match windows; pairing that with a skip check keeps the actual call count *lower* than the old 2h cadence (e.g. overnight UK hours = zero calls).
+
+### Files touched
+- `netlify/functions/_fixturesIndex.js` — added `ko` (ET 24h kickoff) to all 72 entries. New exports: `kickoffUtcMs(fx)` (ET kickoff → UTC ms, with EDT = UTC-4 baked in), `fixtureLikelyFinishedAt(fx, nowMs)` (kickoff + 2.5h buffer covers 90 min + ET + lateness), `GROUP_STAGE_END_ISO` ("2026-06-28T00:00:00Z"), `TOURNAMENT_END_ISO` ("2026-07-20T00:00:00Z").
+- `netlify/functions/_ingest.js` — `runIngest()` accepts `{ force = false }`. Before calling football-data it scans `FIXTURES_INDEX` for pending fixtures (`!state.scores[id] && fixtureLikelyFinishedAt`). If `pending === 0` AND we're not in the KO window (between `GROUP_STAGE_END_ISO` and `TOURNAMENT_END_ISO` — KO bracket isn't in the local index so we keep polling there), the function records a `lastSkippedAt`/`lastSkipReason`/`nextKickoffAt` cursor on `state.ingest` and returns `{ ok:true, skipped:true, reason, nextKickoffAt }` without hitting the API. Successful fetches also stamp `state.ingest.lastSuccessAt` / `lastScoresWritten`.
+- `netlify/functions/fetch-results.js` — `schedule` changed `0 */2 * * *` → `*/30 * * * *`. Header comment updated.
+- `netlify/functions/fetch-results-now.js` — manual admin trigger now calls `runIngest({ force: true })` so the host's "Fetch results now" button always pulls, even if the skip check would say no.
+
+### Skip reasons surfaced
+- `tournament-over` — past `TOURNAMENT_END_ISO`.
+- `all-scored` — every fixture in the index has a score (nothing left to fetch).
+- `no-fixture-finished-since-last-fetch` — there are unscored fixtures, but none have hit kickoff+2.5h yet.
+
+### Verification done
+Node smoke test against `FIXTURES_INDEX`:
+- Pre-tournament (`2026-06-10T12:00Z`, empty scores): `pending=0`, next ko = MEX-RSA `2026-06-11T19:00Z` ✓
+- 30 min into MEX-RSA: `pending=0` (kickoff+2.5h not yet elapsed) ✓
+- 22:00Z on 11 Jun: `pending=1` ✓
+- 14 Jun 14:00Z with days 1-3 scored: `pending=1` (gDr0m1 AUS-TUR late-night, 00:00 ET on 06-14) ✓
+- Same but with gDr0m1 also scored: `pending=0`, next ko = `2026-06-14T17:00Z` (GER-CUW 13:00 ET) ✓
+`node --check` clean on all four touched files.
+
+### Cost shape (rough)
+Old cadence: 12 calls/day = 84/week, every day regardless of fixtures.
+New cadence: still 48 ticks/day, but most skip. During a typical group-stage day with 4 matches at 13/16/19/22 ET (17/20/23 UTC + next-day 02 UTC), real calls fire ≈ from each kickoff+2.5h onward — ≈ 5–8 actual calls per match day. Off-days (10–11 Jun pre-tournament, post-group-stage gap, post-final) = 0 calls.
+
+### Files unchanged
+`pool.js`, `_teamMap.js`, `sweepstake/*` (the client doesn't care how the blob got updated — its 20s poll still picks up changes).
+
+### Earlier this session
 **Today page now derives "Today" from real UK wall-clock date, not the admin-controlled `state.currentDay` pointer.**
 
 ### Why

@@ -20,7 +20,7 @@ export default async (req) => {
       headers: { "content-type": "application/json" },
     });
   }
-  const result = await runIngest();
+  const result = await runIngest({ force: true });
   return new Response(JSON.stringify(result), {
     status: result.ok ? 200 : 500,
     headers: { "content-type": "application/json", "cache-control": "no-store" },
