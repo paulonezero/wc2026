@@ -111,6 +111,17 @@
     const d = dateForDay(day);
     return d.toLocaleDateString("en-GB", { weekday: "short", day: "numeric", month: "short" });
   }
+  // Matchday derived from the user's UK wall-clock date — used by Today so
+  // the page tracks real time without depending on the admin currentDay pointer.
+  // Clamped to [1, TOTAL_DAYS] so it stays valid before / after the tournament.
+  function liveDay() {
+    const now = new Date();
+    const ukYmd = now.toLocaleDateString("en-CA", { timeZone: "Europe/London" });
+    const today = new Date(ukYmd + "T00:00:00Z");
+    const start = new Date(TOURNAMENT_START + "T00:00:00Z");
+    const diff = Math.round((today - start) / 86400000);
+    return Math.max(1, Math.min(TOTAL_DAYS, diff + 1));
+  }
   // matches at 00:00–05:59 ET are *next* ET day but belong to the previous
   // matchday; bump them past 24h so sort puts them last in their matchday.
   function koSortKey(ko) {
@@ -349,7 +360,7 @@
   window.SS = {
     TEAMS, GROUP_LETTERS, CONFED_LABEL, SCALE,
     FIXTURES, KICKS, TOURNAMENT_START, TOTAL_DAYS,
-    dateForDay, fmtDate, fmtKo, fixturesOnDay, mockScore,
+    dateForDay, fmtDate, fmtKo, liveDay, fixturesOnDay, mockScore,
     formMap, formDelta, isAlive, teamWinProbs, playerWinProbs,
     teamsOfPlayer, ownerOf, aliveCount, teamByCode, fmtPct, splitCounts, flagURL, textOn,
     tierLabel, tierSubtitle,

@@ -1,7 +1,7 @@
 /* ============================================================================
    SCREENS · 1 — Sign Up, Today, Draw
    ========================================================================== */
-const { TEAMS: TM, GROUP_LETTERS, fixturesOnDay, fmtDate, fmtKo, dateForDay, fmtPct: pct,
+const { TEAMS: TM, GROUP_LETTERS, fixturesOnDay, fmtDate, fmtKo, dateForDay, liveDay, fmtPct: pct,
         ownerOf, teamByCode, teamsOfPlayer, splitCounts, TOTAL_DAYS,
         tierLabel, tierSubtitle } = window.SS;
 
@@ -192,7 +192,8 @@ function SignUp({ state, onJoin, onForget, go }) {
 /*  TODAY — daily hub: yesterday's results + today's fixtures                 */
 /* ========================================================================== */
 function Today({ state, go }) {
-  const [viewDay, setViewDay] = useState(state.currentDay);
+  const today = liveDay();
+  const [viewDay, setViewDay] = useState(today);
   if (!state.draw.done) {
     const me = state.me ? state.players.find(p => p.id === state.me) : null;
     return <div className="fadein"><Empty title="The draw hasn't happened yet">
@@ -202,7 +203,7 @@ function Today({ state, go }) {
     </Empty></div>;
   }
 
-  const isLive = viewDay === state.currentDay;
+  const isLive = viewDay === today;
   const todayFx = fixturesOnDay(viewDay);
   const yestFx = fixturesOnDay(viewDay - 1).filter(f => state.scores[f.id]);
   const meTeams = state.me ? new Set(teamsOfPlayer(state, state.me)) : new Set();
@@ -274,7 +275,7 @@ function Today({ state, go }) {
         </div>
         <div className="row" style={{ gap: 8 }}>
           <Btn kind="ghost" size="sm" onClick={() => setViewDay(d => Math.max(1, d - 1))} disabled={viewDay <= 1}>← Prev day</Btn>
-          {!isLive && <Btn kind="ink" size="sm" onClick={() => setViewDay(state.currentDay)}>Jump to today</Btn>}
+          {!isLive && <Btn kind="ink" size="sm" onClick={() => setViewDay(today)}>Jump to today</Btn>}
           <Btn kind="ghost" size="sm" onClick={() => setViewDay(d => Math.min(TOTAL_DAYS, d + 1))} disabled={viewDay >= TOTAL_DAYS}>Next day →</Btn>
         </div>
       </div>

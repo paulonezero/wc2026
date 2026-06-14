@@ -4,6 +4,19 @@
 Ship the v1 sweepstake app in time for draw day on **2026-06-11**. The app is already deployed; ongoing work is incremental polish.
 
 ## Most recent change
+**Today page now derives "Today" from real UK wall-clock date, not the admin-controlled `state.currentDay` pointer.**
+
+### Why
+With the tournament underway (today = Sun 14 Jun 2026), the Today page was still showing Matchday 1 (Thu 11 Jun) because nobody had clicked the Admin "Advance day" button. Users open Today expecting to see the actual current day's fixtures; making it self-update from wall-clock removes a manual step the host kept forgetting.
+
+### Files touched
+- `sweepstake/data.js` — added `liveDay()` helper: computes UK calendar date via `toLocaleDateString("en-CA", { timeZone: "Europe/London" })`, diffs against `TOURNAMENT_START` in whole days, clamps to `[1, TOTAL_DAYS]`. Exported on `window.SS`.
+- `sweepstake/screens1.jsx` — `Today` component now grabs `today = liveDay()` once per render and uses it for the initial `viewDay`, the `isLive` check, and the "Jump to today" button — instead of `state.currentDay`. `liveDay` added to the top-of-file `window.SS` destructure.
+
+### Files unchanged
+`screens2.jsx` (Admin "Matchday control" still uses `state.currentDay` — kept as a manual pointer for any features that still want admin-driven day stepping), `store.js`, `pool.js`, `netlify/functions/*`. Nothing else reads `currentDay` so behaviour elsewhere is preserved.
+
+### Earlier this session
 **Auto-results: Netlify Scheduled Function pulls finished matches from football-data.org every 2 hours and merges them into the pool blob.**
 
 ### Why
