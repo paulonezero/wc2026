@@ -9,6 +9,18 @@ const COMP_ID = () => process.env.WC_COMPETITION_ID || "2000";
 const FETCH_TIMEOUT_MS = 15000;
 const adminPassword = () => process.env.ADMIN_PASSWORD || "2026";
 
+// Node fetch on serverless cold starts occasionally throws low-level socket
+// errors before the request reaches the wire. One quick retry papers over
+// those without adding meaningful latency to the happy path.
+async function fetchWithRetry(url, headers) {
+  try {
+    return await fetch(url, { headers, signal: AbortSignal.timeout(FETCH_TIMEOUT_MS) });
+  } catch (e) {
+    await new Promise(r => setTimeout(r, 400));
+    return await fetch(url, { headers, signal: AbortSignal.timeout(FETCH_TIMEOUT_MS) });
+  }
+}
+
 export default async (req) => {
   if (req.method !== "POST") {
     return new Response(JSON.stringify({ error: "Method not allowed" }), {
@@ -30,16 +42,16 @@ export default async (req) => {
     });
   }
 
+  const url = `${API_BASE}/competitions/${COMP_ID()}/teams`;
   let res;
   try {
-    res = await fetch(`${API_BASE}/competitions/${COMP_ID()}/teams`, {
-      headers: { "X-Auth-Token": apiKey },
-      signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
-    });
+    res = await fetchWithRetry(url, { "X-Auth-Token": apiKey });
   } catch (e) {
-    return new Response(JSON.stringify({ ok: false, error: `fetch failed: ${e.message}` }), {
-      status: 500, headers: { "content-type": "application/json" },
-    });
+    const cause = e.cause?.code || e.cause?.message || "";
+    return new Response(JSON.stringify({
+      ok: false,
+      error: `fetch ${url} failed: ${e.name || "Error"} · ${e.message}${cause ? " · cause: " + cause : ""}`,
+    }), { status: 500, headers: { "content-type": "application/json" } });
   }
 
   if (!res.ok) {

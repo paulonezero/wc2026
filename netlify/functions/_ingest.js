@@ -9,6 +9,18 @@ const API_BASE = "https://api.football-data.org/v4";
 const COMP_ID = () => process.env.WC_COMPETITION_ID || "2000"; // FIFA WC 2026
 const FETCH_TIMEOUT_MS = 15000;
 
+// Node fetch on serverless cold starts occasionally throws low-level socket
+// errors before the request reaches the wire. One quick retry papers over
+// those without adding meaningful latency to the happy path.
+async function fetchWithRetry(url, headers) {
+  try {
+    return await fetch(url, { headers, signal: AbortSignal.timeout(FETCH_TIMEOUT_MS) });
+  } catch (e) {
+    await new Promise(r => setTimeout(r, 400));
+    return await fetch(url, { headers, signal: AbortSignal.timeout(FETCH_TIMEOUT_MS) });
+  }
+}
+
 const KO_ROUNDS = {
   ROUND_OF_16: "R16",
   QUARTER_FINALS: "QF",
@@ -63,14 +75,17 @@ export async function runIngest() {
   state.scores ||= {};
   state.teams ||= {};
 
+  const url = `${API_BASE}/competitions/${COMP_ID()}/matches`;
   let res;
   try {
-    res = await fetch(`${API_BASE}/competitions/${COMP_ID()}/matches`, {
-      headers: { "X-Auth-Token": apiKey },
-      signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
-    });
+    res = await fetchWithRetry(url, { "X-Auth-Token": apiKey });
   } catch (e) {
-    return { ok: false, error: `fetch failed: ${e.message}`, at: new Date().toISOString() };
+    const cause = e.cause?.code || e.cause?.message || "";
+    return {
+      ok: false,
+      error: `fetch ${url} failed: ${e.name || "Error"} · ${e.message}${cause ? " · cause: " + cause : ""}`,
+      at: new Date().toISOString(),
+    };
   }
 
   if (!res.ok) {
