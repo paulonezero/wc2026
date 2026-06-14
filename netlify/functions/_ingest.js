@@ -137,6 +137,7 @@ export async function runIngest() {
     warnings: warnings.length,
     at: new Date().toISOString(),
     details: { scoresWritten, eliminated, warnings },
+    state, // returned so the calling client can refresh its local cache
   };
   console.log("[ingest]", JSON.stringify({
     scoresWritten: summary.scoresWritten,

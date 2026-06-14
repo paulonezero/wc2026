@@ -31,6 +31,7 @@ export const TEAM_NAME_TO_CODE = {
   "Czech Republic": "CZE",
   "Bosnia & Herzegovina": "BIH",
   "Bosnia and Herzegovina": "BIH",
+  "Bosnia-Herzegovina": "BIH",
 
   // CONCACAF
   "USA": "USA",

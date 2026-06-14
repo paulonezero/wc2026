@@ -123,7 +123,7 @@ function App() {
     standings: <Standings state={view} go={go} />,
     teams: <Teams state={view} go={go} />,
     draw: <Draw state={view} update={update} go={go} />,
-    admin: <Admin state={view} update={update} go={go} token={token} />,
+    admin: <Admin state={view} update={update} go={go} token={token} replaceState={(s) => setState(window.Net.normalize(s))} />,
   };
 
   return (

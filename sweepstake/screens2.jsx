@@ -201,7 +201,7 @@ function Teams({ state, go }) {
 /* ========================================================================== */
 /*  ADMIN — host desk                                                         */
 /* ========================================================================== */
-function Admin({ state, update, go, token }) {
+function Admin({ state, update, go, token, replaceState }) {
   const [adminDay, setAdminDay] = useState(state.currentDay);
   const [newName, setNewName] = useState("");
   const [picks, setPicks] = useState(() => ({ ...(state.draw.assignments || {}) }));
@@ -214,6 +214,9 @@ function Admin({ state, update, go, token }) {
     try {
       const r = await window.Net.fetchResultsNow(token);
       setFetchResult(r);
+      // Replace local cache with the state the server just wrote, so subsequent
+      // admin edits don't overwrite the new scores with stale data.
+      if (r?.ok && r.state) replaceState(r.state);
     } catch (e) {
       setFetchResult({ ok: false, error: e.message || "Fetch failed" });
     } finally {
