@@ -203,9 +203,24 @@ function timeAgo(iso) {
   const days = Math.round(hrs / 24);
   return `${days} day${days === 1 ? "" : "s"} ago`;
 }
-function DailySnippet({ snippet }) {
+// Bold every occurrence of a player name in `text`. Names are matched at
+// word boundaries (case-insensitive), longest-first so "Cian" doesn't pre-empt
+// "Cianan". Regex special chars in names are escaped so e.g. "O'Brien" doesn't
+// blow up the pattern.
+function highlightNames(text, names) {
+  if (!names?.length) return text;
+  const sorted = [...new Set(names.filter(Boolean))].sort((a, b) => b.length - a.length);
+  const esc = s => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  const re = new RegExp(`\\b(${sorted.map(esc).join("|")})\\b`, "gi");
+  const parts = String(text).split(re);
+  return parts.map((p, i) => i % 2 === 1
+    ? <strong key={i} style={{ fontWeight: 700 }}>{p}</strong>
+    : p);
+}
+function DailySnippet({ snippet, players }) {
   if (!snippet || !snippet.body) return null;
   const paragraphs = String(snippet.body).split(/\n{2,}/).map(s => s.trim()).filter(Boolean);
+  const names = (players || []).map(p => p.name);
   return (
     <div className="card" style={{ padding: "18px 22px", marginBottom: 22, background: "var(--card)",
       borderLeft: "4px solid var(--gold)" }}>
@@ -216,7 +231,9 @@ function DailySnippet({ snippet }) {
         </div>
       </div>
       <div style={{ marginTop: 10, fontSize: 15, lineHeight: 1.55, color: "var(--ink)" }}>
-        {paragraphs.map((p, i) => <p key={i} style={{ margin: i === 0 ? 0 : "10px 0 0" }}>{p}</p>)}
+        {paragraphs.map((p, i) => (
+          <p key={i} style={{ margin: i === 0 ? 0 : "10px 0 0" }}>{highlightNames(p, names)}</p>
+        ))}
       </div>
     </div>
   );
@@ -315,7 +332,7 @@ function Today({ state, go }) {
       </div>
 
       {/* morning snippet (cron- or admin-generated) */}
-      {isLive && <DailySnippet snippet={state.snippet} />}
+      {isLive && <DailySnippet snippet={state.snippet} players={state.players} />}
 
       {/* your teams today */}
       {state.me && myTodayFx.length > 0 &&
