@@ -99,6 +99,21 @@
     return data;
   }
 
+  // Diff football-data's tournament squad list against our _teamMap.js, to
+  // catch unmapped team names BEFORE the live results ingest silently warns.
+  async function validateTeams(password) {
+    if (_mode !== "remote") throw new Error("Validation only works on the deployed site.");
+    const r = await fetch("/api/validate-teams", {
+      method: "POST",
+      headers: { "content-type": "application/json", "accept": "application/json" },
+      body: JSON.stringify({ password }),
+    });
+    let data = {};
+    try { data = await r.json(); } catch (e) {}
+    if (!r.ok) { const err = new Error(data.error || ("HTTP " + r.status)); err.status = r.status; throw err; }
+    return data;
+  }
+
   async function verify(password, state) {
     if (_mode === "remote") {
       try { await post({ action: "verify", password }); return true; }
@@ -107,5 +122,5 @@
     return String(password) === String((state && state.adminPin) || "2026");
   }
 
-  window.Net = { init, getState, signup, save, verify, bumpDonate, fetchResultsNow, normalize, getMode: () => _mode };
+  window.Net = { init, getState, signup, save, verify, bumpDonate, fetchResultsNow, validateTeams, normalize, getMode: () => _mode };
 })();

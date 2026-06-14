@@ -207,6 +207,8 @@ function Admin({ state, update, go, token, replaceState }) {
   const [picks, setPicks] = useState(() => ({ ...(state.draw.assignments || {}) }));
   const [fetchBusy, setFetchBusy] = useState(false);
   const [fetchResult, setFetchResult] = useState(null);
+  const [validateBusy, setValidateBusy] = useState(false);
+  const [validateResult, setValidateResult] = useState(null);
 
   async function fetchResultsNow() {
     if (!token) { window.alert("Host login expired — re-enter the access code."); return; }
@@ -221,6 +223,19 @@ function Admin({ state, update, go, token, replaceState }) {
       setFetchResult({ ok: false, error: e.message || "Fetch failed" });
     } finally {
       setFetchBusy(false);
+    }
+  }
+
+  async function validateTeams() {
+    if (!token) { window.alert("Host login expired — re-enter the access code."); return; }
+    setValidateBusy(true); setValidateResult(null);
+    try {
+      const r = await window.Net.validateTeams(token);
+      setValidateResult(r);
+    } catch (e) {
+      setValidateResult({ ok: false, error: e.message || "Validation failed" });
+    } finally {
+      setValidateBusy(false);
     }
   }
   const dayFx = fxDay(adminDay);
@@ -486,9 +501,12 @@ function Admin({ state, update, go, token, replaceState }) {
               overwrite whatever's in <b style={{ color: "#fff" }}>Enter results</b> above. Use the button below to pull
               right now without waiting for the next tick.
             </div>
-            <div className="row" style={{ gap: 10, marginTop: 14, alignItems: "center" }}>
+            <div className="row" style={{ gap: 10, marginTop: 14, alignItems: "center", flexWrap: "wrap" }}>
               <Btn kind="lime" size="sm" onClick={fetchResultsNow} disabled={fetchBusy || state.mode !== "remote"}>
                 {fetchBusy ? "Fetching…" : "Fetch results now"}
+              </Btn>
+              <Btn kind="ghost" size="sm" onClick={validateTeams} disabled={validateBusy || state.mode !== "remote"}>
+                {validateBusy ? "Checking…" : "Validate team names"}
               </Btn>
               {state.mode !== "remote" && (
                 <span className="mono" style={{ fontSize: 12, color: "#E2D9C7", opacity: .7 }}>
@@ -510,6 +528,34 @@ function Admin({ state, update, go, token, replaceState }) {
                   <div style={{ marginTop: 8, opacity: .85 }}>
                     {fetchResult.details.warnings.slice(0, 6).map((w, i) => <div key={i}>• {w}</div>)}
                     {fetchResult.details.warnings.length > 6 && <div>• …and {fetchResult.details.warnings.length - 6} more</div>}
+                  </div>
+                )}
+              </div>
+            )}
+            {validateResult && (
+              <div className="mono" style={{
+                marginTop: 12, padding: "10px 12px", borderRadius: 8, fontSize: 12.5, lineHeight: 1.5,
+                background: validateResult.ok && validateResult.unmappedCount === 0 ? "rgba(166,255,89,.08)"
+                          : validateResult.ok ? "rgba(255,200,80,.10)" : "rgba(255,100,100,.10)",
+                border: `1px solid ${validateResult.ok && validateResult.unmappedCount === 0 ? "rgba(166,255,89,.35)"
+                                    : validateResult.ok ? "rgba(255,200,80,.45)" : "rgba(255,100,100,.45)"}`,
+                color: "#fff", whiteSpace: "pre-wrap",
+              }}>
+                {!validateResult.ok && `Failed: ${validateResult.error || "unknown error"}`}
+                {validateResult.ok && validateResult.unmappedCount === 0 &&
+                  `OK · all ${validateResult.total} teams resolve to a code`}
+                {validateResult.ok && validateResult.unmappedCount > 0 && (
+                  <>
+                    {`Heads up · ${validateResult.unmappedCount} of ${validateResult.total} team${validateResult.unmappedCount === 1 ? " is" : "s are"} unmapped:`}
+                    <div style={{ marginTop: 8, opacity: .9 }}>
+                      {validateResult.unmapped.map((u, i) =>
+                        <div key={i}>• {u.name} (tla {u.tla || "?"}) — add to _teamMap.js</div>)}
+                    </div>
+                  </>
+                )}
+                {validateResult.ok && validateResult.missingFromApi?.length > 0 && (
+                  <div style={{ marginTop: 8, opacity: .7 }}>
+                    {`Note · ${validateResult.missingFromApi.length} code${validateResult.missingFromApi.length === 1 ? "" : "s"} in our map didn't appear in football-data's squad: ${validateResult.missingFromApi.join(", ")}`}
                   </div>
                 )}
               </div>
