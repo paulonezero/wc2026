@@ -4,6 +4,25 @@
 Ship the v1 sweepstake app in time for draw day on **2026-06-11**. The app is already deployed; ongoing work is incremental polish.
 
 ## Most recent change
+**Public snippet endpoints: `GET /api/snippet` (JSON) and `GET /api/snippet.txt` (plain text) for external consumers.**
+
+### Why
+Host wants to curl the morning snippet from outside the app (e.g. to pipe into a Teams post, a personal dashboard, or another bot). The body was already reachable via `GET /api/pool`, but that returns the whole pool blob — dedicated narrow endpoints are friendlier to scripts and easier to cache/rate-limit later if needed. Two flavours: JSON for programmatic consumers, plain text for shell pipelines.
+
+### Files touched
+- `netlify/functions/snippet.js` (new) — GET-only handler at `path: "/api/snippet"`. Reads `state.snippet` from the `wc26ss` blob store. Returns `{body, generatedAt, windowStart, windowEnd, model, matchIds, playersMentioned, source, warning}` — drops the inner Anthropic raw context but preserves the user-facing fields the existing client renders. 404 with `{error:"no-snippet"}` if the blob has no snippet yet. Public; same security posture as `pool.js` GET. CORS open (`access-control-allow-origin: *`), `cache-control: no-store` so consumers always see the freshest snippet.
+- `netlify/functions/snippet-text.js` (new) — GET-only handler at `path: "/api/snippet.txt"`. Same blob read, returns just `state.snippet.body` as `text/plain; charset=utf-8` with a trailing newline (handy for `curl | mail`, `curl | wc`, etc.). 404 returns `no-snippet\n`. Same CORS / cache-control posture as the JSON endpoint.
+
+### Verification done
+- `node --check` clean on both new files.
+- Smoke: `curl https://<site>/api/snippet` → JSON; `curl https://<site>/api/snippet.txt` → plain prose. Before the first 08:00 UK cron tick or admin trigger, expect `404` from both.
+
+### Next step
+Deploy. Once Netlify picks up the new functions, share whichever URL fits the downstream — JSON for programmatic consumers, `.txt` for shell pipelines.
+
+---
+
+### Earlier this session
 **Morning snippet: AI-written daily write-up of overnight results, on the Today page from 08:00 UK.**
 
 ### Why
