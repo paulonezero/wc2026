@@ -1,10 +1,10 @@
-// Server-side odds engine: form map + wooden-spoon Monte Carlo.
-// Mirrors sweepstake/data.js (formMap, formDelta, woodenSpoonProbs,
-// playerSpoonProbs). Win-odds helpers (teamWinProbsFrom, playerWinProbsFrom,
-// isAlive) live in _snippetGenerator.js — import from there.
+// Server-side odds engine: form map + wooden-spoon projected-table ranking.
+// Mirrors sweepstake/data.js (formMap, formDelta, teamPerformanceTable,
+// woodenSpoonProbs, playerSpoonProbs). Win-odds helpers (teamWinProbsFrom,
+// playerWinProbsFrom, isAlive) live in _snippetGenerator.js — import there.
 //
-// IMPORTANT: when you edit woodenSpoonProbs / formMap / formDelta in
-// sweepstake/data.js, update this file too.
+// IMPORTANT: when you edit teamPerformanceTable / woodenSpoonProbs / formMap /
+// formDelta in sweepstake/data.js, update this file too.
 
 import { FIXTURES_INDEX } from "./_fixturesIndex.js";
 import { TEAMS_CATALOG } from "./_teamsCatalog.js";
@@ -30,86 +30,91 @@ export function formMap(state) {
   return f;
 }
 
-function _poisSample(lambda) {
-  const Lp = Math.exp(-lambda);
-  let k = 0, p = 1;
-  do { k++; p *= Math.random(); } while (p > Lp);
-  return Math.min(k - 1, 6);
+const SPOON_TEMP = 1.6;    // softmax temperature over team weakness
+const SPOON_GD_W = 0.12;   // weight of goal difference in the strength score
+
+// Expected points (3·P(win) + P(draw)) from two independent Poisson goal
+// counts, summed over plausible scorelines 0..8.
+function _expPoints(lamFor, lamAg) {
+  const MAXG = 8;
+  const pf = [], pa = [];
+  let cf = Math.exp(-lamFor), ca = Math.exp(-lamAg);
+  for (let k = 0; k <= MAXG; k++) {
+    pf[k] = cf; pa[k] = ca;
+    cf *= lamFor / (k + 1); ca *= lamAg / (k + 1);
+  }
+  let pw = 0, pd = 0;
+  for (let h = 0; h <= MAXG; h++) {
+    for (let a = 0; a <= MAXG; a++) {
+      const p = pf[h] * pa[a];
+      if (h > a) pw += p; else if (h === a) pd += p;
+    }
+  }
+  return 3 * pw + pd;
 }
 
-// { code → probability(0..1) } that this team finishes bottom of its group
-// AND has the worst overall record across all 12 group-bottom teams (lowest
-// points, then worst GD, then fewest GF). Conditions on state.scores: played
-// fixtures use the real score; unplayed ones are simulated. Probabilities sum
-// to 1.0 across all 48 teams.
-export function woodenSpoonProbsFrom(state, runs = 2000) {
+// Worst → best ranking of all 48 teams (rank 1 = weakest). Each team is
+// projected to a full 3-game group record: played games contribute real
+// points/goals, unplayed games are projected from strength (FIFA + form).
+// Sorted by overall strength ascending. See sweepstake/data.js for the canon.
+export function teamPerformanceTableFrom(state) {
   const form = formMap(state);
   const scores = state?.scores || {};
-
-  // group → [team codes]
-  const groups = {};
-  for (const [code, t] of Object.entries(TEAMS_CATALOG)) {
-    (groups[t.group] = groups[t.group] || []).push(code);
-  }
-
-  // group → [group-stage fixtures] (gate on id prefix in case KO fixtures
-  // are added later)
-  const groupFx = {};
-  for (const fx of FIXTURES_INDEX) {
-    if (fx.id.charAt(0) !== "g") continue;
-    const g = fx.id.charAt(1);
-    (groupFx[g] = groupFx[g] || []).push(fx);
-  }
-
   const strengthOf = (code) =>
     (TEAMS_CATALOG[code]?.fifa || 0) + (form[code] || 0);
 
-  const tally = {};
-  for (const code of Object.keys(TEAMS_CATALOG)) tally[code] = 0;
-  let totalIncr = 0;
-
-  for (let r = 0; r < runs; r++) {
-    const bottoms = [];
-    for (const g of Object.keys(groups)) {
-      const stats = {};
-      for (const c of groups[g]) stats[c] = { pts: 0, gf: 0, ga: 0, gd: 0 };
-      const fxs = groupFx[g] || [];
-      for (const fx of fxs) {
-        let hs, as;
-        const real = scores[fx.id];
-        if (real) { hs = real.hs; as = real.as; }
-        else {
-          const diff = (strengthOf(fx.home) - strengthOf(fx.away)) / 130;
-          hs = _poisSample(Math.max(0.25, Math.min(3.6, 1.35 + diff * 0.5)));
-          as = _poisSample(Math.max(0.25, Math.min(3.6, 1.35 - diff * 0.5)));
-        }
-        stats[fx.home].gf += hs; stats[fx.home].ga += as;
-        stats[fx.away].gf += as; stats[fx.away].ga += hs;
-        if (hs > as) stats[fx.home].pts += 3;
-        else if (hs < as) stats[fx.away].pts += 3;
-        else { stats[fx.home].pts += 1; stats[fx.away].pts += 1; }
-      }
-      for (const c of groups[g]) stats[c].gd = stats[c].gf - stats[c].ga;
-      const order = groups[g].slice().sort((a, b) =>
-        stats[a].pts - stats[b].pts ||
-        stats[a].gd - stats[b].gd ||
-        stats[a].gf - stats[b].gf);
-      const bot = order[0];
-      bottoms.push({ code: bot, pts: stats[bot].pts, gd: stats[bot].gd, gf: stats[bot].gf });
-    }
-    bottoms.sort((a, b) => a.pts - b.pts || a.gd - b.gd || a.gf - b.gf);
-    const worst = bottoms[0];
-    const tied = bottoms.filter(b =>
-      b.pts === worst.pts && b.gd === worst.gd && b.gf === worst.gf);
-    const incr = 1 / tied.length;
-    for (const t of tied) tally[t.code] += incr;
-    totalIncr += 1;
-  }
-
-  const out = {};
+  const rec = {};
   for (const code of Object.keys(TEAMS_CATALOG)) {
-    out[code] = totalIncr ? tally[code] / totalIncr : 0;
+    rec[code] = { played: 0, pts: 0, gf: 0, ga: 0,
+      projPtsAdd: 0, projGfAdd: 0, projGaAdd: 0 };
   }
+  for (const fx of FIXTURES_INDEX) {
+    if (fx.id.charAt(0) !== "g") continue;
+    const H = rec[fx.home], A = rec[fx.away];
+    if (!H || !A) continue;
+    const sc = scores[fx.id];
+    if (sc) {
+      H.played++; A.played++;
+      H.gf += sc.hs; H.ga += sc.as; A.gf += sc.as; A.ga += sc.hs;
+      if (sc.hs > sc.as) H.pts += 3;
+      else if (sc.hs < sc.as) A.pts += 3;
+      else { H.pts += 1; A.pts += 1; }
+    } else {
+      const diff = (strengthOf(fx.home) - strengthOf(fx.away)) / 130;
+      const lamH = Math.max(0.25, Math.min(3.6, 1.35 + diff * 0.5));
+      const lamA = Math.max(0.25, Math.min(3.6, 1.35 - diff * 0.5));
+      H.projPtsAdd += _expPoints(lamH, lamA); A.projPtsAdd += _expPoints(lamA, lamH);
+      H.projGfAdd += lamH; H.projGaAdd += lamA;
+      A.projGfAdd += lamA; A.projGaAdd += lamH;
+    }
+  }
+  const rows = Object.keys(TEAMS_CATALOG).map(code => {
+    const r = rec[code];
+    const t = TEAMS_CATALOG[code];
+    const gd = r.gf - r.ga;
+    const projPts = r.pts + r.projPtsAdd;
+    const projGf = r.gf + r.projGfAdd;
+    const projGa = r.ga + r.projGaAdd;
+    const projGd = projGf - projGa;
+    const score = projPts + SPOON_GD_W * projGd;
+    return { code, group: t.group, fifa: t.fifa, played: r.played,
+      pts: r.pts, gf: r.gf, ga: r.ga, gd, projPts, projGf, projGd, score };
+  });
+  rows.sort((a, b) =>
+    a.score - b.score || a.projGd - b.projGd || a.projGf - b.projGf || a.fifa - b.fifa);
+  rows.forEach((r, i) => { r.rank = i + 1; });
+  return rows;
+}
+
+// { code → probability(0..1) } of taking the wooden spoon, a softmax over the
+// worst→best ranking's weakness. Sums to 1.0 across all 48 teams.
+export function woodenSpoonProbsFrom(state) {
+  const rows = teamPerformanceTableFrom(state);
+  const ws = rows.map(r => Math.exp(-r.score / SPOON_TEMP));
+  const sum = ws.reduce((a, b) => a + b, 0) || 1;
+  const out = {};
+  for (const code of Object.keys(TEAMS_CATALOG)) out[code] = 0;
+  rows.forEach((r, i) => { out[r.code] = ws[i] / sum; });
   return out;
 }
 

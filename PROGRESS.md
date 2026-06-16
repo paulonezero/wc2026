@@ -4,6 +4,23 @@
 Ship the v1 sweepstake app in time for draw day on **2026-06-11**. The app is already deployed; ongoing work is incremental polish.
 
 ## Most recent change
+**Wooden spoon: replaced the Monte Carlo with a deterministic worst→best projected league table of all 48 teams.**
+
+### Why
+Host wanted the spoon odds driven by a single, legible ranking of every team rather than an opaque 2000-run simulation. New model: build one table that projects each team to a full three-group-game record — games already played contribute real points/goals, games still to come are projected from team strength (FIFA + form, the same number the win odds use). This puts teams that have played a different number of games (or none) on the same footing, and lets real results outweigh the projection the more a team plays. Rank everyone weakest→strongest; spoon probability is a softmax over that weakness.
+
+### Files touched
+- `sweepstake/data.js` — removed the `_poisSample` Monte Carlo `woodenSpoonProbs`. Added `_expPoints(lamFor, lamAg)` (expected points from two independent Poissons, scorelines 0..8), `teamPerformanceTable(state)` (all 48 teams sorted worst→best with `{code, group, fifa, played, pts, gf, ga, gd, projPts, projGf, projGd, score, rank}`; rank 1 = weakest), and a new deterministic `woodenSpoonProbs(state)` = softmax over `-score/SPOON_TEMP`, where `score = projPts + SPOON_GD_W·projGd`. Constants `SPOON_TEMP=1.6`, `SPOON_GD_W=0.12` (tunable). `playerSpoonProbs` unchanged (still sums `woodenSpoonProbs` by owner). Exported `teamPerformanceTable` on `window.SS`. The `runs` arg is gone — `woodenSpoonProbs(state)` is now deterministic.
+- `netlify/functions/_oddsEngine.js` — mirrored line-for-line: dropped `_poisSample`, added `_expPoints`, `teamPerformanceTableFrom(state)`, and the softmax `woodenSpoonProbsFrom(state)`. Same constants. `playerSpoonProbsFrom` unchanged. top3 endpoints already call `woodenSpoonProbsFrom(state)` without a runs arg, so no caller change needed.
+- `sweepstake/screens2.jsx` — added `teamPerformanceTable` to the destructure; `perfTable` computed alongside the spoon probs. Rewrote the spoon "How this is calculated" footer to describe the projected-table method + a worked example. Added a new collapsible **Team ranking · worst → best** card below the spoon odds (`showRank` state, default hidden): one row per team — rank, crest, name + group tag (+ "you" tag if owned by the viewer), played count, projected points (1dp), projected GD, subtitle of real record so far or "projected from FIFA + form". Top 3 ranks tinted brown. Reuses the existing `Crest` component + `.odds-*` classes — no CSS change.
+
+### Verification done
+- `node --check` clean on `data.js` + `_oddsEngine.js`; `@babel/parser` (jsx) clean on `screens2.jsx`.
+- Node smoke (server engine + client `data.js` via vm stub — exact parity):
+  - Pre-tournament (no scores): spoon probs sum to 1.000000; all 48 `played==0`; worst 5 = NZL/HAI/CUW/GHA/JOR (lowest FIFA) at ~11→7%; best 3 = FRA/ESP/ARG at ~0.03%. Projected points span 0.47 (weakest) → 8.20 (strongest) over 3 games.
+  - With 2 results (MEX 0-4 RSA, ESP 0-1 CPV): sum still 1.0. Cape Verde's shock win lifts them from a bottom team to rank 24 (proj 4.31, spoon 0.7%); Spain's single loss barely moves them (rank 33, proj 5.15). Played-count distribution mixed (44×0, 4×1) — confirms uneven games-played handling and pure-FIFA projection for teams yet to play.
+
+### Earlier this session
 **Public top-3 endpoints: `GET /api/top3` (JSON) and `GET /api/top3.txt` (plain text) — top 3 players by win odds + top 3 by wooden-spoon odds.**
 
 ### Why

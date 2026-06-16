@@ -1,7 +1,7 @@
 /* ============================================================================
    SCREENS · 2 — Standings, Teams, Admin
    ========================================================================== */
-const { playerWinProbs, teamWinProbs, woodenSpoonProbs, formMap: getForm,
+const { playerWinProbs, teamWinProbs, woodenSpoonProbs, teamPerformanceTable, formMap: getForm,
         teamsOfPlayer: teamsOf, aliveCount: aliveN,
         teamByCode: tByCode, fmtPct: fp2, TEAMS: ALLT, GROUP_LETTERS: GL,
         CONFED_LABEL: CFL, fixturesOnDay: fxDay, fmtDate: fDate, TOTAL_DAYS: TDAYS,
@@ -16,6 +16,7 @@ function Standings({ state, go }) {
   const [open, setOpen] = useState(null);
   const [showTeams, setShowTeams] = useState(true);
   const [showSpoon, setShowSpoon] = useState(true);
+  const [showRank, setShowRank] = useState(false);
   if (!state.draw.done)
     return <Empty title="No standings yet">The leaderboard wakes up once the teams are drawn.
       <div style={{ marginTop: 18 }}><Btn kind="primary" onClick={() => go("admin")}>Go to Admin</Btn></div></Empty>;
@@ -23,7 +24,8 @@ function Standings({ state, go }) {
   const pwp = playerWinProbs(state);
   const tp = teamWinProbs(state);
   const form = getForm(state);
-  // single Monte Carlo pass — derive player rollup locally so we don't sim twice
+  // projected worst→best team table drives the spoon odds (rank 1 = weakest)
+  const perfTable = teamPerformanceTable(state);
   const tsp = woodenSpoonProbs(state);
   const psp = {};
   state.players.forEach(p => {
@@ -179,11 +181,52 @@ function Standings({ state, go }) {
           <div className="mono muted" style={{ fontSize: 11.5, padding: "12px 14px 6px", lineHeight: 1.55, borderTop: "1px dashed rgba(26,22,17,.18)", marginTop: 4 }}>
             <div style={{ fontWeight: 700, color: "var(--ink)", marginBottom: 4 }}>How this is calculated</div>
             <div>
-              We play the remaining group games 2000 times. Each unplayed fixture gets a random scoreline weighted by both teams' strength (the same FIFA + form number from the win-odds table). After each run we read the 12 group tables, pick each group's 4th-placed team, and crown the worst of those 12 — lowest points first, then worst goal difference, then fewest goals scored. The winning team scores 1 wooden-spoon point for that run.
+              We build one league table of all 48 teams. Every team is projected to a full three-group-game record: games already played count their real points and goals; games still to come are projected from team strength (the same FIFA + form number the win odds use). That puts a team who has played once and a team who hasn't kicked off yet on the same footing — and the more a team plays, the more its real results outweigh the projection. We rank everyone from weakest to strongest (projected points, then goal difference), and each team's spoon chance grows the further it sits below the rest.
             </div>
             <div style={{ marginTop: 6 }}>
-              <span style={{ fontWeight: 700, color: "var(--ink)" }}>Example.</span> Curaçao ends up with the wooden spoon in 240 of the 2000 runs → Curaçao has a 12% spoon probability. Whoever owns Curaçao adds that 12% to their player row; if they also drafted Haiti (8%) and Cape Verde (3%), their total wooden-spoon risk is roughly 23%.
+              <span style={{ fontWeight: 700, color: "var(--ink)" }}>Example.</span> Curaçao project to ~1.6 points — bottom of the 48-team table — so they carry the largest spoon share, say 14%. Whoever owns Curaçao adds that 14% to their player row; if they also drafted Haiti (9%) and Cape Verde (4%), their total wooden-spoon risk is roughly 27%.
             </div>
+          </div>
+        </div>}
+
+      {/* worst → best team ranking (the table the spoon odds are built from) */}
+      <div className="row" style={{ justifyContent: "space-between", alignItems: "center", marginTop: 30 }}>
+        <SectLabel>Team ranking · worst → best</SectLabel>
+        <button className="linkbtn" style={{ margin: 0 }} onClick={() => setShowRank(v => !v)}>{showRank ? "Hide" : "Show"}</button>
+      </div>
+      {showRank &&
+        <div className="card" style={{ padding: "8px 8px" }}>
+          <div className="mono muted" style={{ display: "flex", gap: 8, fontSize: 10.5, padding: "4px 10px 8px", borderBottom: "1px dashed rgba(26,22,17,.18)" }}>
+            <span style={{ width: 26 }}>#</span>
+            <span style={{ flex: 1 }}>Team</span>
+            <span style={{ width: 36, textAlign: "center" }}>Pld</span>
+            <span style={{ width: 56, textAlign: "right" }}>Proj pts</span>
+            <span style={{ width: 44, textAlign: "right" }}>Proj GD</span>
+          </div>
+          {perfTable.map((r, i) => {
+            const t = tByCode(r.code);
+            const owner = state.draw.assignments?.[r.code];
+            const mine = owner === state.me;
+            return (
+              <div key={r.code} className="odds-row" style={{ alignItems: "center", ...(i === perfTable.length - 1 ? { borderBottom: "none" } : {}) }}>
+                <div className="mono odds-rk" style={{ color: i < 3 ? "#B5651D" : "var(--muted)" }}>{r.rank}</div>
+                <div className="odds-crest">{t ? <Crest team={t} h={28} fs={13} /> : null}</div>
+                <div className="odds-name" style={{ flex: 1 }}>
+                  <div className="odds-title">
+                    {t ? t.name : r.code}
+                    <span className="tag" style={{ marginLeft: 6, background: "transparent", color: "var(--muted)", borderColor: "rgba(26,22,17,.2)" }}>{r.group}</span>
+                    {mine && <span className="tag" style={{ marginLeft: 4, background: "var(--pop)", color: "#fff", borderColor: "var(--ink)" }}>you</span>}
+                  </div>
+                  <div className="odds-sub">{r.played > 0 ? `${r.pts} pts · GD ${signed(r.gd)} from ${r.played} played` : "no games played · projected from FIFA + form"}</div>
+                </div>
+                <div className="mono muted" style={{ width: 36, textAlign: "center", fontSize: 12 }}>{r.played}</div>
+                <div className="display" style={{ width: 56, textAlign: "right" }}>{r.projPts.toFixed(1)}</div>
+                <div className="mono muted" style={{ width: 44, textAlign: "right", fontSize: 12 }}>{signed(Math.round(r.projGd))}</div>
+              </div>
+            );
+          })}
+          <div className="mono muted" style={{ fontSize: 11.5, padding: "12px 14px 6px", lineHeight: 1.55, borderTop: "1px dashed rgba(26,22,17,.18)", marginTop: 4 }}>
+            Rank 1 is the weakest team. <strong>Proj pts</strong> / <strong>Proj GD</strong> are each team's projected points and goal difference over a full three group games — real results so far plus a FIFA + form projection for any games still to play. This is the table the wooden-spoon odds above are derived from.
           </div>
         </div>}
     </div>
