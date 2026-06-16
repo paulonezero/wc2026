@@ -1,10 +1,13 @@
 /* ============================================================================
    SCREENS · 2 — Standings, Teams, Admin
    ========================================================================== */
-const { playerWinProbs, teamWinProbs, playerSpoonProbs, teamsOfPlayer: teamsOf, aliveCount: aliveN,
+const { playerWinProbs, teamWinProbs, woodenSpoonProbs, formMap: getForm,
+        teamsOfPlayer: teamsOf, aliveCount: aliveN,
         teamByCode: tByCode, fmtPct: fp2, TEAMS: ALLT, GROUP_LETTERS: GL,
         CONFED_LABEL: CFL, fixturesOnDay: fxDay, fmtDate: fDate, TOTAL_DAYS: TDAYS,
         mockScore, isAlive } = window.SS;
+
+function signed(n) { return (n >= 0 ? "+" : "") + n; }
 
 /* ========================================================================== */
 /*  STANDINGS — player leaderboard + win odds                                 */
@@ -19,7 +22,13 @@ function Standings({ state, go }) {
 
   const pwp = playerWinProbs(state);
   const tp = teamWinProbs(state);
-  const psp = playerSpoonProbs(state);
+  const form = getForm(state);
+  // single Monte Carlo pass — derive player rollup locally so we don't sim twice
+  const tsp = woodenSpoonProbs(state);
+  const psp = {};
+  state.players.forEach(p => {
+    psp[p.id] = teamsOf(state, p.id).reduce((a, c) => a + (tsp[c] || 0), 0);
+  });
   const ranked = [...state.players].sort((a, b) => pwp[b.id] - pwp[a.id]);
   const spoonRanked = [...state.players].sort((a, b) => psp[b.id] - psp[a.id]);
   const maxSpoon = psp[spoonRanked[0]?.id] || 1;
@@ -27,6 +36,15 @@ function Standings({ state, go }) {
   const teamsByOdds = ALLT.filter(t => isAlive(state, t.code)).sort((a, b) => tp[b.code] - tp[a.code]);
   const maxT = tp[teamsByOdds[0]?.code] || 1;
   const potOf = prob => state.currency + (state.pot ? Math.round(prob * state.pot) : "?");
+  // top contributing teams to a player's spoon risk
+  const spoonBreakdown = (pid) => {
+    const teams = teamsOf(state, pid)
+      .map(c => ({ c, p: tsp[c] || 0 }))
+      .sort((a, b) => b.p - a.p);
+    const top = teams.slice(0, 3).filter(t => t.p > 0.0005);
+    if (!top.length) return "all teams ~0%";
+    return top.map(t => `${t.c} ${fp2(t.p)}`).join(" · ");
+  };
 
   return (
     <div className="fadein">
@@ -116,14 +134,17 @@ function Standings({ state, go }) {
             <div key={t.code} className="odds-row" style={i === 15 ? { borderBottom: "none" } : null}>
               <div className="mono odds-rk">{i + 1}</div>
               <div className="odds-crest"><Crest team={t} h={28} fs={13} /></div>
-              <div className="odds-name">{t.name}</div>
+              <div className="odds-name">
+                <div className="odds-title">{t.name}</div>
+                <div className="odds-sub">FIFA {t.fifa} · form {signed(form[t.code] || 0)}</div>
+              </div>
               <div className="odds-bar"><Bar value={tp[t.code] / maxT} color={i === 0 ? "var(--gold)" : i < 4 ? "var(--pop)" : "var(--blue)"} /></div>
               <div className="display odds-pct">{fp2(tp[t.code])}</div>
               <div className="odds-owner"><Owner player={window.SS.ownerOf(state, t.code)} size={22} label={false} /></div>
             </div>
           ))}
           <div className="mono muted" style={{ fontSize: 11.5, padding: "10px 12px 4px", lineHeight: 1.5 }}>
-            Seeded by FIFA ranking, nudged by every result. Knocked-out teams drop to 0% and their share spreads across the rest.
+            Softmax over FIFA + recent form. Each row's % = exp((FIFA + form) / 95) ÷ sum across alive teams. Knocked-out teams drop to 0%.
           </div>
         </div>}
 
@@ -139,15 +160,18 @@ function Standings({ state, go }) {
               <div className="mono odds-rk">{i + 1}</div>
               <div className="odds-crest"><Avatar player={p} size={28} /></div>
               <div className="odds-name">
-                {p.name}
-                {p.id === state.me && <span className="tag" style={{ marginLeft: 6, background: "var(--pop)", color: "#fff", borderColor: "var(--ink)" }}>you</span>}
+                <div className="odds-title">
+                  {p.name}
+                  {p.id === state.me && <span className="tag" style={{ marginLeft: 6, background: "var(--pop)", color: "#fff", borderColor: "var(--ink)" }}>you</span>}
+                </div>
+                <div className="odds-sub">{spoonBreakdown(p.id)}</div>
               </div>
               <div className="odds-bar"><Bar value={psp[p.id] / maxSpoon} color={i === 0 ? "#B5651D" : "var(--paper-3)"} /></div>
               <div className="display odds-pct">{fp2(psp[p.id])}</div>
             </div>
           ))}
           <div className="mono muted" style={{ fontSize: 11.5, padding: "10px 12px 4px", lineHeight: 1.5 }}>
-            Chance one of your teams finishes bottom of its group with the worst overall record. Sims the rest of the group stage from current results.
+            2000-run Monte Carlo over the rest of the group stage. Each player's % is the sum of their teams' spoon probs (shown beneath the name).
           </div>
         </div>}
     </div>

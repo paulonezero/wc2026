@@ -4,6 +4,27 @@
 Ship the v1 sweepstake app in time for draw day on **2026-06-11**. The app is already deployed; ongoing work is incremental polish.
 
 ## Most recent change
+**Standings: per-row breakdown subtitle on both odds tables — show *how* each % was computed.**
+
+### Why
+Both odds tables (Team win odds, Wooden Spoon odds) showed a percentage but not the inputs. Adding a tiny mono subtitle under each row's name makes the calculation legible at a glance — FIFA + form for team-win, top contributing teams for player-spoon.
+
+### Files touched
+- `sweepstake/styles.css` — `.odds-name` flipped from a single-line ellipsised text cell to a `display:flex; flex-direction:column; gap:2px` container 170px wide. Added two child rules: `.odds-name .odds-title` (the existing bold uppercase title styling, now scoped) and `.odds-name .odds-sub` (10.5px DM Mono, muted, single-line ellipsised). Both odds tables share these classes — no per-section bespoke styling.
+- `sweepstake/screens2.jsx` —
+  - Top-of-file destructure: dropped unused `playerSpoonProbs`, added `woodenSpoonProbs` + `formMap: getForm`. Added local `signed(n)` helper for `"+12"` / `"-7"` form rendering.
+  - `Standings`: replaced the previous `playerSpoonProbs(state)` call with a single `woodenSpoonProbs(state)` Monte Carlo pass + local roll-up to players (was running the sim twice — once in `playerSpoonProbs`, once internally — now once). `form = getForm(state)` for the team-row subtitle. Added `spoonBreakdown(pid)` helper: sorts the player's teams by spoon prob desc, returns up to 3 entries above 0.05% as `"CUW 12% · HAI 8% · CPV 3%"`, falls back to `"all teams ~0%"` for players whose teams are all top-tier.
+  - Team win odds rows: name cell now `<div className="odds-name"><div className="odds-title">{name}</div><div className="odds-sub">FIFA {fifa} · form {signed(form)}</div></div>`. Footer copy updated: "Softmax over FIFA + recent form. Each row's % = exp((FIFA + form) / 95) ÷ sum across alive teams."
+  - Wooden Spoon odds rows: same name-cell shape, subtitle = `spoonBreakdown(p.id)`. Footer copy: "2000-run Monte Carlo over the rest of the group stage. Each player's % is the sum of their teams' spoon probs (shown beneath the name)."
+
+### Verification done
+- `@babel/parser` (jsx plugin) clean on both touched files.
+- Node smoke (fabricated 8-player drawn state, 2 played fixtures): rendered subtitles read e.g. `ARG → 14.4% | FIFA 1876 · form +0` and `P3 → 23.7% | HAI 20% · UZB 2.3% · RSA 1.0%`. Top 3 by spoon prob match the expected weakest-team owners.
+
+### Files unchanged
+`data.js` (no API change — `playerSpoonProbs` still exported for any external caller but Standings now computes the rollup locally), `screens1.jsx`, `app.jsx`, `store.js`, `net.js`, `ui.jsx`, `index.html`, `netlify/functions/*`.
+
+### Earlier this session
 **Standings: new "Wooden Spoon odds" section — per-player probability of owning the worst overall group-stage team.**
 
 ### Why
