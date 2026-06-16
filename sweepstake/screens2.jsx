@@ -143,8 +143,14 @@ function Standings({ state, go }) {
               <div className="odds-owner"><Owner player={window.SS.ownerOf(state, t.code)} size={22} label={false} /></div>
             </div>
           ))}
-          <div className="mono muted" style={{ fontSize: 11.5, padding: "10px 12px 4px", lineHeight: 1.5 }}>
-            Softmax over FIFA + recent form. Each row's % = exp((FIFA + form) / 95) ÷ sum across alive teams. Knocked-out teams drop to 0%.
+          <div className="mono muted" style={{ fontSize: 11.5, padding: "12px 14px 6px", lineHeight: 1.55, borderTop: "1px dashed rgba(26,22,17,.18)", marginTop: 4 }}>
+            <div style={{ fontWeight: 700, color: "var(--ink)", marginBottom: 4 }}>How this is calculated</div>
+            <div>
+              Each team's <em>strength</em> = FIFA points + recent form (form shifts up to +20 for a heavy win, down to −19 for a heavy loss, +2 for a draw). We convert strengths to win odds with a softmax: every team gets <code>exp(strength ÷ 95)</code> tickets, and your % is your tickets ÷ the total across all teams still alive. Knocked-out teams drop to 0% and their share spreads across the rest.
+            </div>
+            <div style={{ marginTop: 6 }}>
+              <span style={{ fontWeight: 700, color: "var(--ink)" }}>Example.</span> Spain on FIFA 1874 with form +12 has strength 1886 → <code>exp(1886/95) ≈ 4.4×10⁸</code> tickets. Argentina on FIFA 1876, form +0, has strength 1876 → <code>exp(1876/95) ≈ 4.0×10⁸</code>. So Spain edges ahead of Argentina even though Argentina starts higher — the form bump compounds exponentially.
+            </div>
           </div>
         </div>}
 
@@ -170,8 +176,14 @@ function Standings({ state, go }) {
               <div className="display odds-pct">{fp2(psp[p.id])}</div>
             </div>
           ))}
-          <div className="mono muted" style={{ fontSize: 11.5, padding: "10px 12px 4px", lineHeight: 1.5 }}>
-            2000-run Monte Carlo over the rest of the group stage. Each player's % is the sum of their teams' spoon probs (shown beneath the name).
+          <div className="mono muted" style={{ fontSize: 11.5, padding: "12px 14px 6px", lineHeight: 1.55, borderTop: "1px dashed rgba(26,22,17,.18)", marginTop: 4 }}>
+            <div style={{ fontWeight: 700, color: "var(--ink)", marginBottom: 4 }}>How this is calculated</div>
+            <div>
+              We play the remaining group games 2000 times. Each unplayed fixture gets a random scoreline weighted by both teams' strength (the same FIFA + form number from the win-odds table). After each run we read the 12 group tables, pick each group's 4th-placed team, and crown the worst of those 12 — lowest points first, then worst goal difference, then fewest goals scored. The winning team scores 1 wooden-spoon point for that run.
+            </div>
+            <div style={{ marginTop: 6 }}>
+              <span style={{ fontWeight: 700, color: "var(--ink)" }}>Example.</span> Curaçao ends up with the wooden spoon in 240 of the 2000 runs → Curaçao has a 12% spoon probability. Whoever owns Curaçao adds that 12% to their player row; if they also drafted Haiti (8%) and Cape Verde (3%), their total wooden-spoon risk is roughly 23%.
+            </div>
           </div>
         </div>}
     </div>

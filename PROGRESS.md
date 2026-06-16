@@ -4,6 +4,23 @@
 Ship the v1 sweepstake app in time for draw day on **2026-06-11**. The app is already deployed; ongoing work is incremental polish.
 
 ## Most recent change
+**Standings: clearer "How this is calculated" footer on both odds tables, with a worked example.**
+
+### Why
+The previous footers were one-liners ("Softmax over FIFA + recent form…" / "2000-run Monte Carlo…"). Useful for a maths-y reader, opaque to the rest of the pool. Host asked for plain-English explanations with a concrete example so any player can read the table and instantly understand where their number came from.
+
+### Files touched
+- `sweepstake/screens2.jsx` — replaced both footer one-liners with a two-paragraph block: a bold "How this is calculated" heading + the rule, then a "Example." paragraph with real-feeling numbers. Border-top dashed separator + slightly larger line-height to differentiate the explainer from the rows above. No new CSS — uses inline styles on the existing `.mono muted` container.
+  - Team win odds: walks through Spain (FIFA 1874, form +12) vs Argentina (1876, +0) to show how the form bump compounds exponentially.
+  - Wooden Spoon: walks through "Curaçao spoons in 240 of 2000 runs → 12%; if the same owner also holds Haiti (8%) + Cape Verde (3%), total risk ≈ 23%".
+
+### Verification done
+`@babel/parser` (jsx plugin) clean. No CSS changes; reuses existing `.mono muted`, `.odds-row` styling.
+
+### Files unchanged
+`data.js`, `styles.css`, `screens1.jsx`, `app.jsx`, `store.js`, `net.js`, `ui.jsx`, `index.html`, `netlify/functions/*`.
+
+### Earlier this session
 **Standings: per-row breakdown subtitle on both odds tables — show *how* each % was computed.**
 
 ### Why
