@@ -4,6 +4,37 @@
 Ship the v1 sweepstake app in time for draw day on **2026-06-11**. The app is already deployed; ongoing work is incremental polish.
 
 ## Most recent change
+**Public top-3 endpoints: `GET /api/top3` (JSON) and `GET /api/top3.txt` (plain text) — top 3 players by win odds + top 3 by wooden-spoon odds.**
+
+### Why
+Host wants to curl the two ranked tables from Standings (winner + wooden spoon) into external consumers (Teams, dashboards, bots) — same shape as the existing `/api/snippet` + `/api/snippet.txt` pair. Both are per-player rollups: `playerWinProbs` was already ported server-side in `_snippetGenerator.js`; the wooden-spoon Monte Carlo wasn't.
+
+### Files touched
+- `netlify/functions/_teamsCatalog.js` — added `group` field to each of the 48 entries (was just `{name, fifa}`). Needed so the server-side Monte Carlo can bucket teams into groups. Mirrors the `group` column in `sweepstake/data.js:TEAMS`.
+- `netlify/functions/_snippetGenerator.js` — added `export` to `formDelta`, `formMap`, `isAlive`, `teamWinProbsFrom`, `playerWinProbsFrom` (no logic change). The new top3 endpoints reuse them.
+- `netlify/functions/_oddsEngine.js` (new) — server-side spoon Monte Carlo. Exports `formMap(state)` (state-based; walks FIXTURES_INDEX), `woodenSpoonProbsFrom(state, runs=2000)` mirroring `sweepstake/data.js:woodenSpoonProbs` line-for-line, and `playerSpoonProbsFrom(state, teamProbs)` for the per-player rollup. Groups bucketed via `TEAMS_CATALOG[code].group`; per-group fixtures bucketed via `fx.id.charAt(1)` (id pattern `g<A-L>r<0-2>m<N>`). The `formMap` in here is state-based to match the client signature — `_snippetGenerator.js` keeps its window-filtered variant. Two formMap helpers on the server is deliberate: the snippet generator needs to compute "before/after" form for a time window, the odds endpoint needs all-time form. Same `formDelta` math.
+- `netlify/functions/top3.js` (new) — GET-only handler at `path: "/api/top3"`. Reads pool blob; on pre-draw (no players or `draw.done === false`) returns `{generatedAt, winners: [], spoons: []}` with 200 (no 404). Otherwise computes `formMap → teamWinProbs → playerWinProbs` and `woodenSpoonProbsFrom → playerSpoonProbsFrom`, returns top 3 of each as `[{playerId, name, probability}, …3]`. CORS open, `cache-control: no-store` — same posture as `snippet.js`.
+- `netlify/functions/top3-text.js` (new) — plain-text twin at `path: "/api/top3.txt"`. Same logic, body shape:
+  ```
+  Winner odds (top 3):
+  1. Alice — 28%
+  ...
+  Wooden spoon odds (top 3):
+  1. Dave — 23%
+  ...
+  ```
+  Pre-draw returns `"no-draw\n"` with 200, matching `snippet-text.js`'s `"no-snippet\n"` style. Uses the same `fp2` formatter as the UI (1dp under 10%, whole % otherwise).
+
+### Verification done
+- `node --check` clean on all 5 files.
+- Smoke harness with fabricated state (8 players, 48 teams round-robin, 2 played fixtures): formMap correctly accumulates form (MEX -13, RSA +11, ARG +17, ALG -16); team-win probs sum to 1.0; player-win probs sum to 1.0; spoon team probs (500 runs for speed) sum to 1.0 with HAI/NZL/CUW/GHA at the top as expected (lowest FIFA); player spoon probs sum to 1.0. Final top3 JSON shape matches the spec.
+- Pre-draw safety: `formMap` on empty state returns all-zero map; `playerSpoonProbsFrom` returns `{}`. Handlers early-return before the expensive Monte Carlo.
+- No `netlify.toml` edit — path config auto-routes (same as snippet endpoints).
+
+### Files unchanged
+`sweepstake/*`, `pool.js`, `snippet.js`, `snippet-text.js`, `_fixturesIndex.js`, `_ingest.js`, `fetch-results*.js`, `generate-snippet*.js`, `index.html`, `netlify.toml`.
+
+### Earlier this session
 **Standings: clearer "How this is calculated" footer on both odds tables, with a worked example.**
 
 ### Why

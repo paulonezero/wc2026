@@ -58,7 +58,7 @@ function ukWallClockToUtc(ymd, hour) {
 
 // ---- odds engine port (mirrors sweepstake/data.js:teamWinProbs) -------------
 
-function formDelta(goalsFor, goalsAgainst) {
+export function formDelta(goalsFor, goalsAgainst) {
   const m = goalsFor - goalsAgainst;
   if (m > 0) return 8 + Math.min(m - 1, 4) * 3;
   if (m === 0) return 2;
@@ -66,7 +66,7 @@ function formDelta(goalsFor, goalsAgainst) {
 }
 
 // Accumulate form points from a subset of scored fixtures.
-function formMap(scoredFixtures) {
+export function formMap(scoredFixtures) {
   const f = {};
   for (const code of Object.keys(TEAMS_CATALOG)) f[code] = 0;
   for (const { fx, sc } of scoredFixtures) {
@@ -76,12 +76,12 @@ function formMap(scoredFixtures) {
   return f;
 }
 
-function isAlive(state, code) {
+export function isAlive(state, code) {
   return (state.teams?.[code]?.status || "alive") === "alive";
 }
 
 // { code → probability(0..1) } across alive teams, using the given form map.
-function teamWinProbsFrom(state, form) {
+export function teamWinProbsFrom(state, form) {
   const alive = Object.keys(TEAMS_CATALOG).filter(c => isAlive(state, c));
   const exps = alive.map(c => Math.exp((TEAMS_CATALOG[c].fifa + form[c]) / SCALE));
   const sum = exps.reduce((a, b) => a + b, 0) || 1;
@@ -92,7 +92,7 @@ function teamWinProbsFrom(state, form) {
 }
 
 // Per-player win prob = sum of their owned teams' team probs.
-function playerWinProbsFrom(state, teamProbs) {
+export function playerWinProbsFrom(state, teamProbs) {
   const assignments = state.draw?.assignments || {};
   const playerToTeams = {};
   for (const p of state.players || []) playerToTeams[p.id] = [];
