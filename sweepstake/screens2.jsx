@@ -1,7 +1,7 @@
 /* ============================================================================
    SCREENS · 2 — Standings, Teams, Admin
    ========================================================================== */
-const { playerWinProbs, teamWinProbs, teamsOfPlayer: teamsOf, aliveCount: aliveN,
+const { playerWinProbs, teamWinProbs, playerSpoonProbs, teamsOfPlayer: teamsOf, aliveCount: aliveN,
         teamByCode: tByCode, fmtPct: fp2, TEAMS: ALLT, GROUP_LETTERS: GL,
         CONFED_LABEL: CFL, fixturesOnDay: fxDay, fmtDate: fDate, TOTAL_DAYS: TDAYS,
         mockScore, isAlive } = window.SS;
@@ -12,13 +12,17 @@ const { playerWinProbs, teamWinProbs, teamsOfPlayer: teamsOf, aliveCount: aliveN
 function Standings({ state, go }) {
   const [open, setOpen] = useState(null);
   const [showTeams, setShowTeams] = useState(true);
+  const [showSpoon, setShowSpoon] = useState(true);
   if (!state.draw.done)
     return <Empty title="No standings yet">The leaderboard wakes up once the teams are drawn.
       <div style={{ marginTop: 18 }}><Btn kind="primary" onClick={() => go("admin")}>Go to Admin</Btn></div></Empty>;
 
   const pwp = playerWinProbs(state);
   const tp = teamWinProbs(state);
+  const psp = playerSpoonProbs(state);
   const ranked = [...state.players].sort((a, b) => pwp[b.id] - pwp[a.id]);
+  const spoonRanked = [...state.players].sort((a, b) => psp[b.id] - psp[a.id]);
+  const maxSpoon = psp[spoonRanked[0]?.id] || 1;
   const leader = ranked[0];
   const teamsByOdds = ALLT.filter(t => isAlive(state, t.code)).sort((a, b) => tp[b.code] - tp[a.code]);
   const maxT = tp[teamsByOdds[0]?.code] || 1;
@@ -120,6 +124,30 @@ function Standings({ state, go }) {
           ))}
           <div className="mono muted" style={{ fontSize: 11.5, padding: "10px 12px 4px", lineHeight: 1.5 }}>
             Seeded by FIFA ranking, nudged by every result. Knocked-out teams drop to 0% and their share spreads across the rest.
+          </div>
+        </div>}
+
+      {/* wooden spoon odds */}
+      <div className="row" style={{ justifyContent: "space-between", alignItems: "center", marginTop: 30 }}>
+        <SectLabel>Wooden Spoon odds</SectLabel>
+        <button className="linkbtn" style={{ margin: 0 }} onClick={() => setShowSpoon(v => !v)}>{showSpoon ? "Hide" : "Show"}</button>
+      </div>
+      {showSpoon &&
+        <div className="card" style={{ padding: "8px 8px" }}>
+          {spoonRanked.map((p, i) => (
+            <div key={p.id} className="odds-row" style={i === spoonRanked.length - 1 ? { borderBottom: "none" } : null}>
+              <div className="mono odds-rk">{i + 1}</div>
+              <div className="odds-crest"><Avatar player={p} size={28} /></div>
+              <div className="odds-name">
+                {p.name}
+                {p.id === state.me && <span className="tag" style={{ marginLeft: 6, background: "var(--pop)", color: "#fff", borderColor: "var(--ink)" }}>you</span>}
+              </div>
+              <div className="odds-bar"><Bar value={psp[p.id] / maxSpoon} color={i === 0 ? "#B5651D" : "var(--paper-3)"} /></div>
+              <div className="display odds-pct">{fp2(psp[p.id])}</div>
+            </div>
+          ))}
+          <div className="mono muted" style={{ fontSize: 11.5, padding: "10px 12px 4px", lineHeight: 1.5 }}>
+            Chance one of your teams finishes bottom of its group with the worst overall record. Sims the rest of the group stage from current results.
           </div>
         </div>}
     </div>

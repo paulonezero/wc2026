@@ -329,6 +329,83 @@
     return teamsOfPlayer(state, playerId).filter(c => isAlive(state, c)).length;
   }
 
+  /* ---- wooden spoon: Monte Carlo over remaining group-stage results ----- */
+  function _poisSample(lambda) {
+    const Lp = Math.exp(-lambda); let k = 0, p = 1;
+    do { k++; p *= Math.random(); } while (p > Lp);
+    return Math.min(k - 1, 6);
+  }
+
+  // { code: probability(0..1) } that this team finishes bottom of its group
+  // AND has the worst overall record across all 12 group-bottom teams
+  // (lowest points, then worst GD, then fewest GF). Conditions on state.scores:
+  // played fixtures use the real score; unplayed ones are simulated.
+  // Probabilities sum to 1.0 across all 48 teams.
+  function woodenSpoonProbs(state, runs = 2000) {
+    const form = formMap(state);
+    const scores = state.scores || {};
+    const groups = {};
+    TEAMS.forEach(t => { (groups[t.group] = groups[t.group] || []).push(t.code); });
+    const groupFx = {};
+    FIXTURES.forEach(fx => {
+      if (fx.round && fx.round !== "group") return;
+      (groupFx[fx.group] = groupFx[fx.group] || []).push(fx);
+    });
+    const strengthOf = (code) => {
+      const t = teamByCode(code);
+      return ((t && t.fifa) || 0) + (form[code] || 0);
+    };
+    const tally = {}; TEAMS.forEach(t => tally[t.code] = 0);
+    let totalIncr = 0;
+    for (let r = 0; r < runs; r++) {
+      const bottoms = [];
+      for (const g of Object.keys(groups)) {
+        const stats = {};
+        groups[g].forEach(c => { stats[c] = { pts: 0, gf: 0, ga: 0, gd: 0 }; });
+        const fxs = groupFx[g] || [];
+        for (const fx of fxs) {
+          let hs, as;
+          const real = scores[fx.id];
+          if (real) { hs = real.hs; as = real.as; }
+          else {
+            const diff = (strengthOf(fx.home) - strengthOf(fx.away)) / 130;
+            hs = _poisSample(Math.max(0.25, Math.min(3.6, 1.35 + diff * 0.5)));
+            as = _poisSample(Math.max(0.25, Math.min(3.6, 1.35 - diff * 0.5)));
+          }
+          stats[fx.home].gf += hs; stats[fx.home].ga += as;
+          stats[fx.away].gf += as; stats[fx.away].ga += hs;
+          if (hs > as) stats[fx.home].pts += 3;
+          else if (hs < as) stats[fx.away].pts += 3;
+          else { stats[fx.home].pts += 1; stats[fx.away].pts += 1; }
+        }
+        groups[g].forEach(c => { stats[c].gd = stats[c].gf - stats[c].ga; });
+        const order = groups[g].slice().sort((a, b) =>
+          stats[a].pts - stats[b].pts || stats[a].gd - stats[b].gd || stats[a].gf - stats[b].gf);
+        const bot = order[0];
+        bottoms.push({ code: bot, pts: stats[bot].pts, gd: stats[bot].gd, gf: stats[bot].gf });
+      }
+      bottoms.sort((a, b) => a.pts - b.pts || a.gd - b.gd || a.gf - b.gf);
+      const worst = bottoms[0];
+      const tied = bottoms.filter(b => b.pts === worst.pts && b.gd === worst.gd && b.gf === worst.gf);
+      const incr = 1 / tied.length;
+      tied.forEach(t => { tally[t.code] += incr; });
+      totalIncr += 1;
+    }
+    const out = {};
+    TEAMS.forEach(t => { out[t.code] = totalIncr ? tally[t.code] / totalIncr : 0; });
+    return out;
+  }
+
+  // Sum spoon probs by owner → { playerId: probability(0..1) }
+  function playerSpoonProbs(state) {
+    const tp = woodenSpoonProbs(state);
+    const out = {};
+    state.players.forEach(p => {
+      out[p.id] = teamsOfPlayer(state, p.id).reduce((a, c) => a + (tp[c] || 0), 0);
+    });
+    return out;
+  }
+
   /* ---- helpers ---------------------------------------------------------- */
   function fmtPct(x) { return (x * 100).toFixed(x < 0.0095 ? 1 : x < 0.1 ? 1 : 0) + "%"; }
   // readable text color over a solid hex background
@@ -364,6 +441,7 @@
     FIXTURES, KICKS, TOURNAMENT_START, TOTAL_DAYS,
     dateForDay, fmtDate, fmtKo, liveDay, fixturesOnDay, mockScore,
     formMap, formDelta, isAlive, teamWinProbs, playerWinProbs,
+    woodenSpoonProbs, playerSpoonProbs,
     teamsOfPlayer, ownerOf, aliveCount, teamByCode, fmtPct, splitCounts, flagURL, textOn,
     tierLabel, tierSubtitle,
   };

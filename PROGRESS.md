@@ -4,6 +4,26 @@
 Ship the v1 sweepstake app in time for draw day on **2026-06-11**. The app is already deployed; ongoing work is incremental polish.
 
 ## Most recent change
+**Standings: new "Wooden Spoon odds" section — per-player probability of owning the worst overall group-stage team.**
+
+### Why
+The pool's wooden spoon prize goes to whichever player owns the team that finishes bottom of its group AND has the worst overall record (lowest points → worst GD → fewest GF) across all 12 group-bottom teams. Standings only had positive odds — players had no visible read on who's most at risk. This adds a player-ranked table below "Team win odds" computed via Monte Carlo simulation that conditions on actual results so far.
+
+### Files touched
+- `sweepstake/data.js` — added `woodenSpoonProbs(state, runs=2000)`: builds per-group fixture lists from the `FIXTURES` index, then for each sim run either reads `state.scores[id]` (played) or generates Poisson goals (`lambda = clamp(1.35 ± strengthDiff*0.5, 0.25, 3.6)`) where `strengthDiff = (home.fifa+form[home] - away.fifa-form[away]) / 130`. Form-adjusted strength reuses the existing `formMap()` so the spoon odds shift with live results the same way the win odds do. Within each sim: sort group by `pts asc / gd asc / gf asc` → 4th-place team. Across 12 group bottoms: same comparator. Cross-group ties split the sim's increment equally (1/N) for zero bias. Also added `playerSpoonProbs(state)` summing team probs by owner. Both exported on `window.SS`. No new RNG — uses `Math.random()` (jitter <1pp at 2000 runs; Standings re-renders only on state change so no smoothness issue).
+- `sweepstake/screens2.jsx` — added `playerSpoonProbs` to the top-of-file destructure. In `Standings`: added `showSpoon` `useState(true)`, computed `psp` + `spoonRanked` + `maxSpoon`. New section inserted after the "Team win odds" card: Show/Hide toggle matching the existing one, then a `.card` of `.odds-row`s — one per player, sorted by descending spoon probability. Reuses the existing `.odds-row`/`.odds-rk`/`.odds-crest`/`.odds-name`/`.odds-bar`/`.odds-pct` CSS — no `styles.css` change. Bar colour is brown (`#B5651D`) for #1 + muted paper for the rest (gold would falsely read as "winning"). The current user's row gets the existing "you" tag.
+
+### Verification done
+- `node --check` clean on `data.js`; `@babel/parser` (jsx plugin) clean on both touched files.
+- Node smoke: fabricated drawn state (8 players, 48 teams shuffled across them, no scores). `woodenSpoonProbs` returns probabilities that sum to exactly 1.0 across teams; `playerSpoonProbs` likewise sums to 1.0 across players. Top spoon candidates were NZL/CUW/GHA/HAI — the lowest-FIFA group-stage teams — confirming the sim weights match intuition.
+
+### Still to do (operator side)
+None — pure client compute. Refresh Standings in a deployed environment after the next pool poll (≤20s) and the new section appears below the Team win odds toggle.
+
+### Files unchanged
+`netlify/functions/*`, `sweepstake/screens1.jsx`, `app.jsx`, `store.js`, `net.js`, `ui.jsx`, `styles.css`, `index.html`, `pool.js`.
+
+### Earlier this session
 **Public snippet endpoints: `GET /api/snippet` (JSON) and `GET /api/snippet.txt` (plain text) for external consumers.**
 
 ### Why
@@ -296,4 +316,4 @@ Untouched (donate/currency/pool infrastructure): `sweepstake/net.js` (`bumpDonat
 - **Self-host flag images** if offline robustness matters.
 
 ## Next step
-Operator: register at football-data.org, set `FOOTBALL_DATA_API_KEY` (and optionally `WC_COMPETITION_ID`) in Netlify env, deploy, then trigger `POST /api/fetch-results` with the admin password and inspect `warnings`. Patch `_teamMap.js` for any unknown team names that show up. Once verified, commit `netlify/functions/fetch-results.js`, `netlify/functions/_teamMap.js`, `netlify/functions/_fixturesIndex.js`, `sweepstake/data.js`, `PROGRESS.md`.
+Deploy the wooden spoon feature: commit `sweepstake/data.js`, `sweepstake/screens2.jsx`, `PROGRESS.md`. Open Standings in production after deploy and confirm the new "Wooden Spoon odds" section renders below "Team win odds" with N players sorted by descending probability (probabilities sum to 100% across the pool).
