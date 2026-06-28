@@ -2,6 +2,7 @@
    SCREENS · 2 — Standings, Teams, Admin
    ========================================================================== */
 const { playerWinProbs, teamWinProbs, woodenSpoonProbs, teamPerformanceTable, formMap: getForm,
+        groupStageComplete, woodenSpoonResult,
         teamsOfPlayer: teamsOf, aliveCount: aliveN,
         teamByCode: tByCode, fmtPct: fp2, TEAMS: ALLT, GROUP_LETTERS: GL,
         CONFED_LABEL: CFL, fixturesOnDay: fxDay, fmtDate: fDate, TOTAL_DAYS: TDAYS,
@@ -26,6 +27,9 @@ function Standings({ state, go }) {
   const form = getForm(state);
   // projected worst→best team table drives the spoon odds (rank 1 = weakest)
   const perfTable = teamPerformanceTable(state);
+  // once every group game is played the standings + spoon are final, not odds
+  const complete = groupStageComplete(state);
+  const spoon = complete ? woodenSpoonResult(state) : null;
   const tsp = woodenSpoonProbs(state);
   const psp = {};
   state.players.forEach(p => {
@@ -156,12 +160,55 @@ function Standings({ state, go }) {
           </div>
         </div>}
 
-      {/* wooden spoon odds */}
+      {/* wooden spoon — final award once the group stage is complete, else odds */}
       <div className="row" style={{ justifyContent: "space-between", alignItems: "center", marginTop: 30 }}>
-        <SectLabel>Wooden Spoon odds</SectLabel>
+        <SectLabel>{complete ? "Wooden Spoon" : "Wooden Spoon odds"}</SectLabel>
         <button className="linkbtn" style={{ margin: 0 }} onClick={() => setShowSpoon(v => !v)}>{showSpoon ? "Hide" : "Show"}</button>
       </div>
-      {showSpoon &&
+      {showSpoon && complete && spoon &&
+        (() => {
+          const t = tByCode(spoon.row.code);
+          const r = spoon.row;
+          const mineSpoon = spoon.owner && spoon.owner.id === state.me;
+          return (
+            <div className="card" style={{ padding: 0, overflow: "hidden", border: "2px solid #B5651D" }}>
+              <div style={{ background: "#B5651D", color: "#fff", padding: "8px 16px", display: "flex", alignItems: "center", gap: 10 }}>
+                <span style={{ fontSize: 20 }}>🥄</span>
+                <span className="display" style={{ fontSize: 16, textTransform: "uppercase", letterSpacing: ".06em" }}>Wooden Spoon</span>
+              </div>
+              <div className="row" style={{ gap: 16, padding: "18px 16px", alignItems: "center" }}>
+                {t ? <Crest team={t} h={48} fs={20} /> : null}
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div className="display" style={{ fontSize: 22, textTransform: "uppercase" }}>
+                    {t ? t.name : r.code}
+                    <span className="tag" style={{ marginLeft: 8, background: "transparent", color: "var(--muted)", borderColor: "rgba(26,22,17,.2)" }}>{r.group}</span>
+                  </div>
+                  <div className="mono muted" style={{ fontSize: 12, marginTop: 4 }}>
+                    {r.pts} pts · GD {signed(r.gd)} · {r.gf} GF · bottom of all 48
+                  </div>
+                </div>
+                <div style={{ textAlign: "right" }}>
+                  {spoon.owner
+                    ? <div className="row" style={{ gap: 8, justifyContent: "flex-end", alignItems: "center" }}>
+                        <div style={{ textAlign: "right" }}>
+                          <div className="mono muted" style={{ fontSize: 10, textTransform: "uppercase", letterSpacing: ".08em" }}>owned by</div>
+                          <div className="display" style={{ fontSize: 17, textTransform: "uppercase" }}>
+                            {spoon.owner.name}
+                            {mineSpoon && <span className="tag" style={{ marginLeft: 6, background: "var(--pop)", color: "#fff", borderColor: "var(--ink)" }}>you</span>}
+                          </div>
+                        </div>
+                        <Avatar player={spoon.owner} size={40} />
+                      </div>
+                    : <div className="mono muted" style={{ fontSize: 12 }}>unowned</div>}
+                </div>
+              </div>
+              <div className="mono muted" style={{ fontSize: 11.5, padding: "12px 14px", lineHeight: 1.55, borderTop: "1px dashed rgba(26,22,17,.18)" }}>
+                All 72 group games are in. The wooden spoon goes to the team that finished bottom of the combined 48-team table — fewest points, then worst goal difference, then fewest goals scored. The full table is below.
+              </div>
+            </div>
+          );
+        })()}
+      {showSpoon && !complete &&
         <div className="card" style={{ padding: "8px 8px" }}>
           {spoonRanked.map((p, i) => (
             <div key={p.id} className="odds-row" style={i === spoonRanked.length - 1 ? { borderBottom: "none" } : null}>
@@ -200,8 +247,8 @@ function Standings({ state, go }) {
             <span style={{ width: 26 }}>#</span>
             <span style={{ flex: 1 }}>Team</span>
             <span style={{ width: 36, textAlign: "center" }}>Pld</span>
-            <span style={{ width: 56, textAlign: "right" }}>Proj pts</span>
-            <span style={{ width: 44, textAlign: "right" }}>Proj GD</span>
+            <span style={{ width: 56, textAlign: "right" }}>{complete ? "Pts" : "Proj pts"}</span>
+            <span style={{ width: 44, textAlign: "right" }}>{complete ? "GD" : "Proj GD"}</span>
           </div>
           {perfTable.map((r, i) => {
             const t = tByCode(r.code);
@@ -217,16 +264,18 @@ function Standings({ state, go }) {
                     <span className="tag" style={{ marginLeft: 6, background: "transparent", color: "var(--muted)", borderColor: "rgba(26,22,17,.2)" }}>{r.group}</span>
                     {mine && <span className="tag" style={{ marginLeft: 4, background: "var(--pop)", color: "#fff", borderColor: "var(--ink)" }}>you</span>}
                   </div>
-                  <div className="odds-sub">{r.played > 0 ? `${r.pts} pts · GD ${signed(r.gd)} from ${r.played} played` : "no games played · projected from FIFA + form"}</div>
+                  <div className="odds-sub">{complete ? `${r.pts} pts · GD ${signed(r.gd)} · ${r.gf} GF` : r.played > 0 ? `${r.pts} pts · GD ${signed(r.gd)} from ${r.played} played` : "no games played · projected from FIFA + form"}</div>
                 </div>
                 <div className="mono muted" style={{ width: 36, textAlign: "center", fontSize: 12 }}>{r.played}</div>
-                <div className="display" style={{ width: 56, textAlign: "right" }}>{r.projPts.toFixed(1)}</div>
-                <div className="mono muted" style={{ width: 44, textAlign: "right", fontSize: 12 }}>{signed(Math.round(r.projGd))}</div>
+                <div className="display" style={{ width: 56, textAlign: "right" }}>{complete ? r.pts : r.projPts.toFixed(1)}</div>
+                <div className="mono muted" style={{ width: 44, textAlign: "right", fontSize: 12 }}>{complete ? signed(r.gd) : signed(Math.round(r.projGd))}</div>
               </div>
             );
           })}
           <div className="mono muted" style={{ fontSize: 11.5, padding: "12px 14px 6px", lineHeight: 1.55, borderTop: "1px dashed rgba(26,22,17,.18)", marginTop: 4 }}>
-            Rank 1 is the weakest team. <strong>Proj pts</strong> / <strong>Proj GD</strong> are each team's projected points and goal difference over a full three group games — real results so far plus a FIFA + form projection for any games still to play. This is the table the wooden-spoon odds above are derived from.
+            {complete
+              ? <>Final group-stage table, all 72 games played. Rank 1 is the wooden spoon — teams are ranked worst → best by points, then goal difference, then goals scored.</>
+              : <>Rank 1 is the weakest team. <strong>Proj pts</strong> / <strong>Proj GD</strong> are each team's projected points and goal difference over a full three group games — real results so far plus a FIFA + form projection for any games still to play. This is the table the wooden-spoon odds above are derived from.</>}
           </div>
         </div>}
     </div>

@@ -275,6 +275,7 @@
 
   /* ---- odds engine ------------------------------------------------------ */
   const SCALE = 95;
+  const _EMPTY_SET = new Set();   // shared no-eliminations result (group not yet over)
 
   function formDelta(goalsFor, goalsAgainst) {
     const m = goalsFor - goalsAgainst;
@@ -296,7 +297,13 @@
     return f;
   }
 
-  function isAlive(state, code) { return (state.teams?.[code]?.status || "alive") === "alive"; }
+  // A team is "alive" if the host hasn't knocked it out AND, once the group
+  // stage is complete, it reached the Round of 32 (top-2 of its group or one of
+  // the 8 best third-placed teams). See groupNonQualifiers below.
+  function isAlive(state, code) {
+    if ((state.teams?.[code]?.status || "alive") !== "alive") return false;
+    return !groupNonQualifiers(state).has(code);
+  }
 
   // { code: probability(0..1) } across alive teams
   function teamWinProbs(state) {
@@ -412,21 +419,78 @@
       return { code: t.code, group: t.group, fifa: t.fifa, played: r.played,
         pts: r.pts, gf: r.gf, ga: r.ga, gd, projPts, projGf, projGd, score };
     });
-    rows.sort((a, b) =>
-      a.score - b.score || a.projGd - b.projGd || a.projGf - b.projGf || a.fifa - b.fifa);
+    // Once every group game is played the table is final: rank on real
+    // standings (points, then goal difference, then goals scored). Before then,
+    // rank on the GD-weighted projected strength.
+    rows.sort(groupStageComplete(state)
+      ? (a, b) => a.pts - b.pts || a.gd - b.gd || a.gf - b.gf || a.fifa - b.fifa
+      : (a, b) => a.score - b.score || a.projGd - b.projGd || a.projGf - b.projGf || a.fifa - b.fifa);
     rows.forEach((r, i) => { r.rank = i + 1; });
     return rows;
+  }
+
+  // True once every group fixture has a score — the group stage is complete and
+  // the standings / wooden spoon are settled rather than projected.
+  function groupStageComplete(state) {
+    const sc = state.scores || {};
+    return FIXTURES.filter(fx => !fx.round || fx.round === "group")
+                   .every(fx => sc[fx.id]);
+  }
+
+  // Teams eliminated at the group stage — a Set of codes, empty until every
+  // group game is in. WC2026 sends 32 teams to the Round of 32: the top two of
+  // each of the 12 groups plus the 8 best third-placed teams. The other 16 (the
+  // 12 group-bottom teams + the 4 worst third-placed teams) are out. Ranking is
+  // points, then goal difference, then goals scored, then FIFA rank as a
+  // deterministic last resort (head-to-head tiebreaks are not modelled).
+  function groupNonQualifiers(state) {
+    if (!groupStageComplete(state)) return _EMPTY_SET;
+    const scores = state.scores || {};
+    const rec = {};
+    TEAMS.forEach(t => { rec[t.code] = { code: t.code, group: t.group, fifa: t.fifa, pts: 0, gd: 0, gf: 0 }; });
+    FIXTURES.forEach(fx => {
+      if (fx.round && fx.round !== "group") return;
+      const sc = scores[fx.id]; if (!sc) return;
+      const H = rec[fx.home], A = rec[fx.away]; if (!H || !A) return;
+      H.gf += sc.hs; H.gd += sc.hs - sc.as; A.gf += sc.as; A.gd += sc.as - sc.hs;
+      if (sc.hs > sc.as) H.pts += 3; else if (sc.hs < sc.as) A.pts += 3; else { H.pts += 1; A.pts += 1; }
+    });
+    // Lower is worse: sort descending so [0],[1] qualify, [2] is third, [3] is out.
+    const better = (a, b) => b.pts - a.pts || b.gd - a.gd || b.gf - a.gf || b.fifa - a.fifa;
+    const out = new Set();
+    const thirds = [];
+    GROUP_LETTERS.forEach(g => {
+      const teams = TEAMS.filter(t => t.group === g).map(t => rec[t.code]).sort(better);
+      if (teams[3]) out.add(teams[3].code);   // group bottom → out
+      if (teams[2]) thirds.push(teams[2]);     // third place → best-thirds pool
+    });
+    thirds.sort(better).slice(8).forEach(t => out.add(t.code)); // 9th-best third onward → out
+    return out;
   }
 
   // { code: probability(0..1) } of taking the wooden spoon, derived from the
   // worst→best ranking via a softmax over each team's weakness. Sums to 1.0.
   function woodenSpoonProbs(state) {
     const rows = teamPerformanceTable(state);
+    const out = {}; TEAMS.forEach(t => out[t.code] = 0);
+    // Group stage over → the spoon is settled: the bottom team takes it for sure.
+    if (groupStageComplete(state)) {
+      if (rows.length) out[rows[0].code] = 1;
+      return out;
+    }
     const ws = rows.map(r => Math.exp(-r.score / SPOON_TEMP));
     const sum = ws.reduce((a, b) => a + b, 0) || 1;
-    const out = {}; TEAMS.forEach(t => out[t.code] = 0);
     rows.forEach((r, i) => { out[r.code] = ws[i] / sum; });
     return out;
+  }
+
+  // The settled wooden-spoon award once the group stage is complete:
+  // { row, owner } for the bottom (rank-1) team, or null while still projected.
+  function woodenSpoonResult(state) {
+    if (!groupStageComplete(state)) return null;
+    const row = teamPerformanceTable(state)[0];
+    if (!row) return null;
+    return { row, owner: ownerOf(state, row.code) };
   }
 
   // Sum spoon probs by owner → { playerId: probability(0..1) }
@@ -475,6 +539,7 @@
     dateForDay, fmtDate, fmtKo, liveDay, fixturesOnDay, mockScore,
     formMap, formDelta, isAlive, teamWinProbs, playerWinProbs,
     woodenSpoonProbs, playerSpoonProbs, teamPerformanceTable,
+    groupStageComplete, woodenSpoonResult, groupNonQualifiers,
     teamsOfPlayer, ownerOf, aliveCount, teamByCode, fmtPct, splitCounts, flagURL, textOn,
     tierLabel, tierSubtitle,
   };

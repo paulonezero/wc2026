@@ -14,6 +14,7 @@ import {
   kickoffUtcMs,
 } from "./_fixturesIndex.js";
 import { TEAMS_CATALOG, teamName } from "./_teamsCatalog.js";
+import { groupNonQualifiersFrom } from "./_oddsEngine.js";
 
 const ANTHROPIC_URL = "https://api.anthropic.com/v1/messages";
 const MODEL = "claude-sonnet-4-6";
@@ -77,7 +78,9 @@ export function formMap(scoredFixtures) {
 }
 
 export function isAlive(state, code) {
-  return (state.teams?.[code]?.status || "alive") === "alive";
+  if ((state.teams?.[code]?.status || "alive") !== "alive") return false;
+  // Once the group stage is complete, teams that miss the Round of 32 are out.
+  return !groupNonQualifiersFrom(state).has(code);
 }
 
 // { code → probability(0..1) } across alive teams, using the given form map.

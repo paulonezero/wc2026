@@ -30,8 +30,54 @@ export function formMap(state) {
   return f;
 }
 
+const _EMPTY_SET = new Set();
+
+// Teams eliminated at the group stage — a Set of codes, empty until every group
+// game is in. WC2026 sends 32 teams to the Round of 32: the top two of each of
+// the 12 groups plus the 8 best third-placed teams; the other 16 are out.
+// Ranking: points, GD, goals scored, then FIFA rank (no head-to-head). Mirrors
+// sweepstake/data.js:groupNonQualifiers.
+export function groupNonQualifiersFrom(state) {
+  if (!groupStageCompleteFrom(state)) return _EMPTY_SET;
+  const scores = state?.scores || {};
+  const rec = {};
+  for (const [code, t] of Object.entries(TEAMS_CATALOG)) {
+    rec[code] = { code, group: t.group, fifa: t.fifa, pts: 0, gd: 0, gf: 0 };
+  }
+  for (const fx of FIXTURES_INDEX) {
+    if (fx.id.charAt(0) !== "g") continue;
+    const sc = scores[fx.id]; if (!sc) continue;
+    const H = rec[fx.home], A = rec[fx.away]; if (!H || !A) continue;
+    H.gf += sc.hs; H.gd += sc.hs - sc.as; A.gf += sc.as; A.gd += sc.as - sc.hs;
+    if (sc.hs > sc.as) H.pts += 3; else if (sc.hs < sc.as) A.pts += 3; else { H.pts += 1; A.pts += 1; }
+  }
+  const better = (a, b) => b.pts - a.pts || b.gd - a.gd || b.gf - a.gf || b.fifa - a.fifa;
+  const byGroup = {};
+  for (const r of Object.values(rec)) (byGroup[r.group] ||= []).push(r);
+  const out = new Set();
+  const thirds = [];
+  for (const g of Object.keys(byGroup)) {
+    const teams = byGroup[g].sort(better);
+    if (teams[3]) out.add(teams[3].code);
+    if (teams[2]) thirds.push(teams[2]);
+  }
+  thirds.sort(better).slice(8).forEach(t => out.add(t.code));
+  return out;
+}
+
 const SPOON_TEMP = 1.6;    // softmax temperature over team weakness
 const SPOON_GD_W = 0.12;   // weight of goal difference in the strength score
+
+// True once every group fixture has a score — group stage complete, standings
+// and wooden spoon are settled rather than projected. Mirrors data.js.
+export function groupStageCompleteFrom(state) {
+  const scores = state?.scores || {};
+  for (const fx of FIXTURES_INDEX) {
+    if (fx.id.charAt(0) !== "g") continue;
+    if (!scores[fx.id]) return false;
+  }
+  return true;
+}
 
 // Expected points (3·P(win) + P(draw)) from two independent Poisson goal
 // counts, summed over plausible scorelines 0..8.
@@ -100,8 +146,11 @@ export function teamPerformanceTableFrom(state) {
     return { code, group: t.group, fifa: t.fifa, played: r.played,
       pts: r.pts, gf: r.gf, ga: r.ga, gd, projPts, projGf, projGd, score };
   });
-  rows.sort((a, b) =>
-    a.score - b.score || a.projGd - b.projGd || a.projGf - b.projGf || a.fifa - b.fifa);
+  // Once the group stage is complete, rank on real standings (points, then goal
+  // difference, then goals scored); before then on the projected strength score.
+  rows.sort(groupStageCompleteFrom(state)
+    ? (a, b) => a.pts - b.pts || a.gd - b.gd || a.gf - b.gf || a.fifa - b.fifa
+    : (a, b) => a.score - b.score || a.projGd - b.projGd || a.projGf - b.projGf || a.fifa - b.fifa);
   rows.forEach((r, i) => { r.rank = i + 1; });
   return rows;
 }
@@ -110,10 +159,15 @@ export function teamPerformanceTableFrom(state) {
 // worst→best ranking's weakness. Sums to 1.0 across all 48 teams.
 export function woodenSpoonProbsFrom(state) {
   const rows = teamPerformanceTableFrom(state);
-  const ws = rows.map(r => Math.exp(-r.score / SPOON_TEMP));
-  const sum = ws.reduce((a, b) => a + b, 0) || 1;
   const out = {};
   for (const code of Object.keys(TEAMS_CATALOG)) out[code] = 0;
+  // Group stage over → the spoon is settled: the bottom team takes it for sure.
+  if (groupStageCompleteFrom(state)) {
+    if (rows.length) out[rows[0].code] = 1;
+    return out;
+  }
+  const ws = rows.map(r => Math.exp(-r.score / SPOON_TEMP));
+  const sum = ws.reduce((a, b) => a + b, 0) || 1;
   rows.forEach((r, i) => { out[r.code] = ws[i] / sum; });
   return out;
 }

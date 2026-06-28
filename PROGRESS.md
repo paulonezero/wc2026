@@ -4,6 +4,44 @@
 Ship the v1 sweepstake app in time for draw day on **2026-06-11**. The app is already deployed; ongoing work is incremental polish.
 
 ## Most recent change
+**Auto-eliminate group-stage non-qualifiers once the group stage is complete.**
+
+### Why
+After the group stage the win-odds leaderboard still counted all 48 teams as alive. WC2026 sends 32 to the Round of 32 (top 2 of each of 12 groups + 8 best third-placed teams); the other 16 are out. Rather than persist this via ingest (like knockout losers, which the app can't derive locally), group qualification is *fully derivable* from the group scores the app already has — so it's computed live inside `isAlive`. Every existing consumer (win odds, alive counts, Field strikethrough, /api/top3 winners, snippet) reflects it automatically, immediately, and self-corrects if a score is fixed. No ingest/persistence/normalize changes; the wooden-spoon table doesn't use `isAlive`, so it's unaffected.
+
+Ranking for qualification: points → goal difference → goals scored → FIFA rank (deterministic last resort). Head-to-head tiebreaks are **not** modelled (consistent with the app's other simplifications); host can hand-adjust via Admin → "Who's still in" for any head-to-head edge case.
+
+### Files touched (this change)
+- `sweepstake/data.js` — added `groupNonQualifiers(state)` → Set of eliminated codes (empty until `groupStageComplete`): per-group sort, group-bottom out, 9th-best-third onward out. `isAlive` now also excludes that set. Added `_EMPTY_SET` const; exported `groupNonQualifiers` on `window.SS`.
+- `netlify/functions/_oddsEngine.js` — mirrored `groupNonQualifiersFrom(state)` (reuses `groupStageCompleteFrom`).
+- `netlify/functions/_snippetGenerator.js` — imports `groupNonQualifiersFrom`; its `isAlive` folds it in, so `/api/top3` winners + the snippet exclude non-qualifiers.
+
+### Verification done (this change)
+- `node --check` clean on all three; `_snippetGenerator` imports resolve (no circular dep with `_oddsEngine`).
+- Node parity test (server import + client via window shim) on a fully-scored pool: both detect complete; both eliminate the **same 16** codes; both leave **32** alive; eliminations break down as 12 group-bottoms + 4 worst thirds (4 groups lose 2, rest lose 1 — totals 16); client win-prob sums to 1.0000 with the 16 eliminated teams at exactly 0.
+- Not run in a real browser (no local headless browser); behaviour validated via the node harness only.
+
+---
+
+### Prior change
+**Group stage complete: standings + wooden spoon now finalize (settled award) instead of staying projected.**
+
+### Why
+All 72 group games are in, so the spoon should be *declared*, not shown as ~14% odds. Detection is results-based: "complete" = every group fixture has a score (self-finalizing, no date flag). When complete the worst→best table ranks on **real standings** — points, then GD, then goals scored (rank 1 = wooden spoon) — instead of the GD-weighted projected `score`; the spoon becomes deterministic (bottom team → 1.0, owner reads 100%); and the Standings screen swaps the per-player odds bars for an **award card** (bottom team + crest + group tag + owner) with the final worst→best table below (real Pts/GD columns, no "Proj"/projection language). Before completion everything falls back to the old projected/odds presentation.
+
+### Files touched (this change)
+- `sweepstake/data.js` — added `groupStageComplete(state)` (every group fixture scored) and `woodenSpoonResult(state)` (`{row, owner}` for rank-1 team, or null until complete). `teamPerformanceTable` now picks its sort by completion (real-standings vs projected). `woodenSpoonProbs` returns bottom-team→1.0 when complete, else the existing softmax. Exported both new helpers on `window.SS`.
+- `netlify/functions/_oddsEngine.js` — mirrored: `groupStageCompleteFrom(state)`, completion-based sort in `teamPerformanceTableFrom`, deterministic `woodenSpoonProbsFrom`. `/api/top3` + `/api/top3.txt` + `snippet.js` consume these unchanged, so the public spoon finalizes automatically.
+- `sweepstake/screens2.jsx` — `Standings`: pulls `groupStageComplete`/`woodenSpoonResult`; renders the award card when complete (label "Wooden Spoon", brown banner, team + owner + "X pts · GD ±Y · Z GF · bottom of all 48"); worst→best table relabels Proj pts/GD → Pts/GD, shows real per-row record, and a final-table footer. Win-odds leaderboard left untouched (still a live last-team-standing projection into the knockouts).
+
+### Verification done (this change)
+- `node --check` clean on `data.js`; esbuild JSX transform clean on `screens2.jsx`.
+- Node parity test (server `_oddsEngine.js` AND client `data.js` via window shim): fully-scored pool with ARG bottom → `groupStageComplete=true`, `woodenSpoonResult` = ARG (0 pts, −15 GD, rank 1, owner Dave), spoon probs `{ARG:1}`, player probs `{owner:1, other:0}`. Clear one game → complete=false, result null, projected spoon probs sum back to 1.0. Client/server agree.
+- Not run in a real browser (in-browser Babel/React via CDN, no local headless browser); JSX validated via esbuild only.
+
+---
+
+### Prior change
 **Wooden spoon: replaced the Monte Carlo with a deterministic worst→best projected league table of all 48 teams.**
 
 ### Why
