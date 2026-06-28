@@ -4,6 +4,52 @@
 Ship the v1 sweepstake app in time for draw day on **2026-06-11**. The app is already deployed; ongoing work is incremental polish.
 
 ## Most recent change
+**Goalscorer feed via ESPN's public API (no key) — layered on top of football-data.org.**
+
+### Why / source choice
+football-data.org's free tier returns final scores but no goal events. We evaluated:
+API-Football free tier — has full 2026 WC events BUT the free plan is **locked out of the
+current season** ("try from 2022 to 2024"), so unusable; openfootball/worldcup.json — free
+but hand-updated ~once a day. **ESPN's public soccer API** (league slug `fifa.world`) gives
+per-match goal events — scorer, minute, type, assist — for **free, no key, no quota, live**.
+Picked ESPN. Primary feed (football-data.org) unchanged: still owns scores/standings/elims.
+
+### How it works (frugal, defensive)
+- `netlify/functions/_goalsFeed.js` → `ingestGoals(state, nowMs)`:
+  - Needs-goals logic from data we already have: a fixture is "finished" iff football-data
+    wrote its score; expected goals = hs+as; fetch only when stored < expected (and `tries < 5`).
+    0-0 finished matches are skipped (no goals to get).
+  - Caches local-fixture → ESPN-event-id in `state.goalsFeed.fxMap` by fetching ESPN
+    `scoreboard?dates=YYYYMMDD` (±1 day) and matching via `codeFromName` + `findFixtureId`,
+    so scoreboards aren't re-fetched once known.
+  - Then `summary?event=<id>` per missing fixture → maps `keyEvents[]` scoring plays to
+    `{team, scorer, min, injury, type}`. ESPN credits the benefiting team on every scoring
+    play (incl. own goals) so **no flip**; types: `Own Goal`→own, `Penalty - Scored`→penalty,
+    `Goal`/`Goal - Header`/`Goal - Volley`→regular; minute parsed from `clock.displayValue`
+    ("45'+2'" → min 45, injury 2).
+  - Caps: 6 scoreboards + 8 summaries per run. Steady state (all goals stored) = **0 calls**.
+- `_ingest.js` calls `ingestGoals` on both main + skip paths, in try/catch so a feed failure
+  never affects scores. Counts added to summary/log.
+- **No env var / key required** — works on deploy. (The football-data `mapGoals` path is left
+  in as a harmless no-op fallback should that feed ever return goals.)
+
+### Verified LIVE against real 2026 data (this change)
+- All 48 ESPN team display names map cleanly to existing codes (zero gaps).
+- End-to-end run through the real module: built scores for all 72 group fixtures from ESPN,
+  backfilled **215 goal events across 65 fixtures** (7 genuine 0-0s skipped) in 87 ESPN calls
+  total; idempotent (final run needed 0 / 0 calls). Sample gAr0m0 = Quiñones 9', Jiménez 67'.
+  Live Golden Boot via `data.js`: Messi 6, Haaland/Mbappé/Vinícius 4 — all correct.
+- `node --check` clean on `_goalsFeed.js` + `_ingest.js`.
+
+### Notes
+- Backfill of the ~65 existing scored fixtures runs at 8/run via the 30-min cron (~4–5h) or
+  click "Fetch results now" in Admin a few times. New matches fill within a cron cycle.
+- ESPN's API is unofficial (no SLA/ToS guarantee) — acceptable for a hobby pool; feed is
+  fully isolated so any ESPN outage only pauses goal detail, nothing else.
+
+---
+
+### Prior change
 **New Stats page — tournament numbers + sweepstake blend, plus goal-event capture.**
 
 ### Why

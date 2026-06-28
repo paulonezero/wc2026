@@ -3,6 +3,7 @@
 // scheduled and manual paths can never diverge.
 import { getStore } from "@netlify/blobs";
 import { codeFromName } from "./_teamMap.js";
+import { ingestGoals } from "./_goalsFeed.js";
 import {
   findFixtureId,
   FIXTURES_INDEX,
@@ -154,9 +155,13 @@ export async function runIngest({ force = false } = {}) {
         lastSkipReason: reason,
         nextKickoffAt: nextKickoffMs === Infinity ? null : new Date(nextKickoffMs).toISOString(),
       };
+      // Even when there's no new score to fetch, top up any missing goal detail
+      // (e.g. the api-sports key was added after scores were already in).
+      let goals = null;
+      try { goals = await ingestGoals(state, nowMs); } catch (e) { goals = { ok: false, error: e.message }; }
       await store.setJSON("pool", state);
-      const summary = { ok: true, skipped: true, reason, nextKickoffAt: state.ingest.nextKickoffAt, at: nowIso };
-      console.log("[ingest] skip", JSON.stringify(summary));
+      const summary = { ok: true, skipped: true, reason, goals, nextKickoffAt: state.ingest.nextKickoffAt, at: nowIso };
+      console.log("[ingest] skip", JSON.stringify({ reason, goalsFetched: goals?.goalsFetched || 0 }));
       return summary;
     }
   }
@@ -239,6 +244,11 @@ export async function runIngest({ force = false } = {}) {
     }
   }
 
+  // Layer in goalscorer/minute detail from the supplementary api-sports feed.
+  // Isolated in try/catch so a goals-feed failure never affects scores.
+  let goalsFeed = null;
+  try { goalsFeed = await ingestGoals(state, nowMs); } catch (e) { goalsFeed = { ok: false, error: e.message }; }
+
   state.ingest = {
     ...state.ingest,
     lastFetchAt: nowIso,
@@ -254,6 +264,7 @@ export async function runIngest({ force = false } = {}) {
     ok: true,
     scoresWritten: scoresWritten.length,
     goalsWritten,
+    goalsFeed,
     eliminations: eliminated.length,
     warnings: warnings.length,
     at: nowIso,
@@ -263,6 +274,7 @@ export async function runIngest({ force = false } = {}) {
   console.log("[ingest]", JSON.stringify({
     scoresWritten: summary.scoresWritten,
     goalsWritten: summary.goalsWritten,
+    goalsFeedFetched: goalsFeed?.goalsFetched || 0,
     eliminations: summary.eliminations,
     warnings: summary.warnings,
     at: summary.at,
