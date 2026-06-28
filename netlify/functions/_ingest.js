@@ -47,8 +47,36 @@ function defaultState() {
     draw: { done: false, assignments: {}, order: [] },
     teams: {},
     scores: {},
+    goals: {},
     currentDay: 1,
   };
+}
+
+// football-data goal type → our compact form. Unknown/missing → "regular".
+function normGoalType(t) {
+  if (t === "PENALTY") return "penalty";
+  if (t === "OWN") return "own";
+  return "regular";
+}
+
+// Map a football-data match's goals array → our per-fixture goal list, or null
+// when the API tier doesn't return goal detail. Goals whose scoring team name
+// can't be mapped to a local code are dropped rather than failing the fixture.
+function mapGoals(m) {
+  if (!Array.isArray(m.goals) || !m.goals.length) return null;
+  const out = [];
+  for (const g of m.goals) {
+    const team = codeFromName(g.team?.name);
+    if (!team) continue;
+    out.push({
+      team,
+      scorer: g.scorer?.name || "Unknown",
+      min: typeof g.minute === "number" ? g.minute : null,
+      injury: typeof g.injuryTime === "number" ? g.injuryTime : null,
+      type: normGoalType(g.type),
+    });
+  }
+  return out.length ? out : null;
 }
 
 // UTC ISO → ET local calendar date (YYYY-MM-DD). EDT = UTC−4 throughout the
@@ -99,6 +127,7 @@ export async function runIngest({ force = false } = {}) {
   const store = getStore("wc26ss");
   const state = (await store.get("pool", { type: "json" })) || defaultState();
   state.scores ||= {};
+  state.goals ||= {};
   state.teams ||= {};
   state.ingest ||= {};
 
@@ -155,6 +184,7 @@ export async function runIngest({ force = false } = {}) {
   const scoresWritten = [];
   const eliminated = [];
   const warnings = [];
+  let goalsWritten = 0;
 
   for (const m of matches) {
     if (m.status !== "FINISHED") continue;
@@ -198,6 +228,15 @@ export async function runIngest({ force = false } = {}) {
     }
     state.scores[fxId] = { hs, as };
     scoresWritten.push(`${fxId} ${home} ${hs}-${as} ${away}`);
+
+    // Goal-level detail is tier-dependent on football-data: store it when the
+    // match carries a goals array, otherwise leave state.goals[fxId] untouched.
+    // Overwrite (not append) so re-running ingest is idempotent.
+    const goals = mapGoals(m);
+    if (goals) {
+      state.goals[fxId] = goals;
+      goalsWritten += goals.length;
+    }
   }
 
   state.ingest = {
@@ -214,6 +253,7 @@ export async function runIngest({ force = false } = {}) {
   const summary = {
     ok: true,
     scoresWritten: scoresWritten.length,
+    goalsWritten,
     eliminations: eliminated.length,
     warnings: warnings.length,
     at: nowIso,
@@ -222,6 +262,7 @@ export async function runIngest({ force = false } = {}) {
   };
   console.log("[ingest]", JSON.stringify({
     scoresWritten: summary.scoresWritten,
+    goalsWritten: summary.goalsWritten,
     eliminations: summary.eliminations,
     warnings: summary.warnings,
     at: summary.at,

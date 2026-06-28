@@ -18,6 +18,7 @@
     if (!st.teams || !Object.keys(st.teams).length) st.teams = window.Store.freshTeams();
     if (!st.draw) st.draw = { done: false, assignments: {}, order: [] };
     if (!st.scores) st.scores = {};
+    if (!st.goals) st.goals = {};
     if (!Array.isArray(st.players)) st.players = [];
     return st;
   }

@@ -105,14 +105,16 @@ function App() {
   // ---- tab visibility ------------------------------------------------------
   let TABS;
   if (drawn) {
-    TABS = [{ key: "today", label: "Today" }, { key: "standings", label: "Standings" }, { key: "teams", label: "Teams" }];
+    TABS = [{ key: "today", label: "Today" }, { key: "standings", label: "Standings" },
+            { key: "stats", label: "Stats" }, { key: "teams", label: "Teams" }];
     if (admin) TABS.push({ key: "admin", label: "Admin" });
   } else if (admin) {
     TABS = [{ key: "signup", label: "Sign Up" }, { key: "teams", label: "Teams" },
             { key: "today", label: "Today" }, { key: "standings", label: "Standings" },
+            { key: "stats", label: "Stats" },
             { key: "admin", label: "Admin", dot: state.players.length >= 2 }];
   } else {
-    TABS = [{ key: "signup", label: "Sign Up" }];
+    TABS = [{ key: "signup", label: "Sign Up" }, { key: "stats", label: "Stats" }];
   }
   const validKeys = new Set([...TABS.map(t => t.key), ...(admin ? ["draw"] : [])]);
   const safeTab = validKeys.has(tab) ? tab : (drawn ? "today" : (admin ? "admin" : "signup"));
@@ -121,6 +123,7 @@ function App() {
     signup: <SignUp state={view} onJoin={onJoin} onForget={onForget} go={go} />,
     today: <Today state={view} go={go} />,
     standings: <Standings state={view} go={go} />,
+    stats: <Stats state={view} go={go} />,
     teams: <Teams state={view} go={go} />,
     draw: <Draw state={view} update={update} go={go} />,
     admin: <Admin state={view} update={update} go={go} token={token} replaceState={(s) => setState(window.Net.normalize(s))} />,

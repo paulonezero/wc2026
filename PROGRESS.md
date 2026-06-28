@@ -4,6 +4,53 @@
 Ship the v1 sweepstake app in time for draw day on **2026-06-11**. The app is already deployed; ongoing work is incremental polish.
 
 ## Most recent change
+**New Stats page — tournament numbers + sweepstake blend, plus goal-event capture.**
+
+### Why
+There was nowhere celebrating the *interesting numbers* of the tournament. Added a
+dedicated **Stats** tab (always visible) that blends tournament-wide stats with
+player-ownership ones. User asked for goalscorers/goal-times; that detail wasn't being
+stored (ingest discarded everything but the final score), so the ingest now captures
+goal events **defensively** — football-data's `m.goals` is tier-dependent and may be
+absent, so the UI degrades to "Not available yet" for scorer/timing sections while every
+score-derived stat works regardless.
+
+### Files touched (this change)
+- `netlify/functions/_ingest.js` — added `mapGoals(m)` + `normGoalType`; writes
+  `state.goals[fxId]` (overwrite = idempotent) only when `m.goals` is present; drops
+  goals whose team name doesn't map; `goalsWritten` counter; `goals:{}` default.
+- `netlify/functions/pool.js`, `sweepstake/store.js`, `sweepstake/net.js` — `goals:{}`
+  default + normalize guard so the field survives the round-trip. `store.js demoState()`
+  now synthesises plausible goal events (so the Golden Boot/timing UI is testable locally).
+- `sweepstake/data.js` — new pure stat fns on `window.SS`: `hasGoalData`, `allGoals`,
+  `topScorers` (Golden Boot, own-goals excluded, pens tracked), `goalTimingBuckets`
+  (15-min bands, stoppage folds into its half), `teamScoringTable`/`teamDefensiveTable`
+  (re-sort `teamPerformanceTable`), `biggestWins`, `highestScoringMatches`,
+  `tournamentHeadlines`, `perPlayerStats`, `goalOwnershipLeaders`.
+- `sweepstake/screens3.jsx` — **new** `Stats` component (headliner tiles → Golden Boot →
+  goal timing → best attacks/defences → biggest wins → goal fests → ownership leaders),
+  reuses ui.jsx components + `.odds-row`/`.matchrow` patterns. Goal sections gate on
+  `hasGoalData`; ownership section gates on `draw.done`.
+- `index.html` — load `screens3.jsx`. `app.jsx` — register `stats` screen + add "Stats"
+  tab to all three TABS branches (always visible).
+
+### Verification done (this change)
+- `node --check` clean on all plain-JS files; `@babel/parser` (jsx) parses all `.jsx`.
+- Node harness over real fixtures/teams: every stat fn correct (timing buckets sum to
+  total goals; degrade path returns empty/null). `codeFromName` maps sample names.
+- **Real browser render via Playwright** (chromium): demo pool → Stats tab renders all 7
+  sections, Golden Boot with crests+owners, 47 rows, no JS page errors. Degrade run
+  (goals wiped) shows exactly 2 "Not available yet" cards, hides the Golden Boot
+  headliner tile, keeps all score-derived sections.
+
+### Not yet done / notes
+- Goal capture is **unproven against the live football-data tier** — if `m.goals` is
+  absent on the production key, scorer/timing sections stay in graceful-degrade
+  (everything else still works). Confirm via *Fetch results now* once matches are live.
+
+---
+
+### Prior change
 **Auto-eliminate group-stage non-qualifiers once the group stage is complete.**
 
 ### Why

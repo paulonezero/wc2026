@@ -30,6 +30,7 @@
       draw: { done: false, assignments: {}, order: [] },
       teams: freshTeams(),
       scores: {},              // fixtureId -> {hs, as}
+      goals: {},               // fixtureId -> [{team,scorer,min,injury,type}] (when API provides)
       currentDay: 1,           // tournament matchday pointer (admin-controlled)
     };
   }
@@ -147,13 +148,43 @@
   const DEMO_NAMES = ["Big Phil","Sam","Priya","Marco","Yuki","Dani",
                       "Tomás","Aisha","Leo","Nina","Omar","Grace"];
 
+  // A small surname pool to synthesise plausible scorer names for the demo.
+  const DEMO_SURNAMES = ["Silva","Müller","Tanaka","Okafor","Rossi","Hassan",
+    "Nguyen","Park","Lopez","Andersen","Kovač","Mbeki","Haaland","Sorensen",
+    "Diallo","Costa","Yilmaz","Ferreira","Novak","Adeyemi"];
+
+  // Build fake goal events that add up to a fixture's score, concentrating goals
+  // on a couple of "strikers" per team so the demo Golden Boot has a real race.
+  function demoGoalsFor(fx, sc) {
+    const out = [];
+    const add = (team, count) => {
+      for (let i = 0; i < count; i++) {
+        const slot = Math.random() < 0.6 ? 0 : 1 + Math.floor(Math.random() * 2);
+        const idx = (team.charCodeAt(0) + team.charCodeAt(2) + slot * 7) % DEMO_SURNAMES.length;
+        const min = 1 + Math.floor(Math.random() * 90);
+        const injury = min >= 45 && Math.random() < 0.15 ? 1 + Math.floor(Math.random() * 4) : null;
+        const type = Math.random() < 0.12 ? "penalty" : (Math.random() < 0.05 ? "own" : "regular");
+        out.push({ team, scorer: DEMO_SURNAMES[idx], min, injury, type });
+      }
+    };
+    add(fx.home, sc.hs);
+    add(fx.away, sc.as);
+    return out.sort((a, b) => (a.min + (a.injury || 0)) - (b.min + (b.injury || 0)));
+  }
+
   function demoState() {
     const s = defaultState();
     s.pot = 240;               // give the demo a real pot so the share breakdown displays
     DEMO_NAMES.forEach(n => addPlayer(s, n));
     commitDraw(s);
     s.currentDay = 8;          // round 2 wrapping up; yesterday (7) + today (8) populated
-    FIXTURES.forEach(fx => { if (fx.day < s.currentDay) s.scores[fx.id] = mockScore(fx); });
+    FIXTURES.forEach(fx => {
+      if (fx.day < s.currentDay) {
+        const sc = mockScore(fx);
+        s.scores[fx.id] = sc;
+        s.goals[fx.id] = demoGoalsFor(fx, sc);
+      }
+    });
     s.me = null;               // demo = host view
     return s;
   }

@@ -24,6 +24,7 @@ function defaultState() {
     draw: { done: false, assignments: {}, order: [] },
     teams: {},        // client populates the 48 team slots on load
     scores: {},
+    goals: {},        // per-fixture goal events when the API tier provides them
     currentDay: 1,
   };
 }
