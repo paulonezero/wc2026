@@ -4,6 +4,84 @@
 Ship the v1 sweepstake app in time for draw day on **2026-06-11**. The app is already deployed; ongoing work is incremental polish.
 
 ## Most recent change
+**Morning snippet pivots to the knockout stage — survival roll-call + conditional matchup teasers.**
+
+### Why
+Group stage is over; the report should now reflect sudden death. User wants it to (a) lead with
+the knockout framing, (b) call out which players are down to a handful of teams (or wiped out),
+and (c) tease the upcoming sudden-death ties **including who a team *could* meet next round** now
+that the bracket is known. The blocker was that no knockout bracket existed in code (group fixtures
+only; KO was handled via Admin toggles / ingest eliminations).
+
+### Decisions
+- **Hardcode the real KO fixtures** (user choice) rather than derive R32 pairings from standings —
+  avoids encoding FIFA's ~495-combination best-thirds allocation table. The 16 R32 pairings live as
+  an **editable slot-token arrangement** (`R32` in `_bracket.js`); the rest of the tree (R16→Final)
+  is derived **positionally** from that list's order.
+- **Full roll-call** of every player's surviving-team count (fewest-first), not just players whose
+  teams played in the window.
+
+### How it works
+- `netlify/functions/_bracket.js` (new):
+  - `groupStandingsFrom(state)` → per-group order + 8 best thirds (same tiebreak as
+    `_oddsEngine.groupNonQualifiersFrom`).
+  - `R32` = 16 hardcoded pairings using tokens `1X`/`2X` (group winner/runner-up) and `T1..T8`
+    (ranked best thirds). **EDIT this to match the official draw**; its order defines the tree.
+  - `buildBracket(state)` → full 31-match tree (R32 1–16, R16 17–24, QF 25–28, SF 29–30, F 31);
+    resolves tokens from standings, propagates winners using `state.teams[code].status/eliminatedRound`.
+  - `knockoutContext(state)` → frontier round's ties with `{home,away}` owners, `ownerVsOwner`,
+    and `couldMeetNext` (who the winner could face next round, with owners). Null pre-knockout.
+- `netlify/functions/_snippetGenerator.js`:
+  - Computes `playerStandings` (roll-call, fewest-remaining first) and `knockout` up front.
+  - Empty overnight window now still files a **forward-looking** KO report (was a "quiet night" skip).
+  - `ctx` gains `stage`/`mode`/`playerStandings`/`knockout`; LLM call + fallback factored into shared
+    `finishSnippet`; `buildSystemPrompt(ctx)` swaps in knockout rules (roll-call, tie preview,
+    conditional `couldMeetNext` teasers) vs the group-stage prompt. `fallbackBody` updated to match.
+- `netlify/functions/_ingest.js`: added `ROUND_OF_32`/`LAST_32` → `R32` to `KO_ROUNDS` so the FIRST
+  knockout round's losers are actually eliminated (previously unmapped → "teams left" wouldn't update
+  after R32). `_bracket.js`'s `reachedBeyond` already understands `R32`. ALSO now **persists KO results**:
+  KO matches write `{round,home,away,hs,as,utcDate,winner,loser,pens?}` to a new `state.koMatches`
+  map (keyed `R32:HOME-AWAY`), in addition to marking the loser out. `defaultState` gains `koMatches:{}`.
+
+### KO scoreline recap (follow-up, now done)
+- `_snippetGenerator.js`: in the knockout stage, `state.koMatches` whose `utcDate` falls in the morning
+  window become recap `matches` (real kickoff from the feed, so they slot into the same window machinery —
+  no hardcoded KO schedule). Each carries `advanced`/`knockedOut` (team+owner) and `pens`. The prompt has
+  a dedicated KO-recap branch ("make the elimination the headline"); the look-ahead still follows. Order:
+  KO recap → (else) look-ahead → (else) quiet.
+
+### UI surfacing (follow-up, now done)
+- `sweepstake/data.js`: browser **mirror** of `_bracket.js` — `groupStandings`, `buildBracket`,
+  `knockoutContext` (+ the `KO_R32` arrangement, which must stay in sync with `_bracket.js`). Exposed on
+  `window.SS`.
+- `sweepstake/screens2.jsx`: new `Knockouts` screen — survival roll-call (teams remaining per player,
+  "last team"/"out" tags) + frontier ties as cards (owner-vs-owner highlighted, "winner could meet next"
+  chips with owners). Reuses `Crest`/`Avatar`/`TeamChip`/`SectLabel`/`Empty`.
+- `sweepstake/app.jsx`: a **Knockouts** tab appears (between Standings and Stats) only once
+  `groupStageComplete(state)` is true.
+
+### Verified
+- Synthetic complete-group state: bracket resolves all 32 R32 participants uniquely, 0 unresolved
+  slots; `couldMeetNext` populated with owners; marking R32 away-teams out advances the frontier to
+  R16 with correct winner propagation; lookahead fallback renders roll-call + next-round ties.
+- KO recap path: synthesised overnight `koMatches` (incl. a penalties tie) → fallback recap names who
+  beat whom + who's out, then the remaining-round look-ahead. `matchIds` populated.
+- Browser `data.js` mirror produces **identical** R32 pairings/frontier to the server `_bracket.js`
+  (parity harness). All 5 `.jsx` files transform cleanly under esbuild; all changed `.js` pass `node --check`.
+- Group-stage (incomplete) path unchanged: `knockout` null, normal recap, no roll-call, no Knockouts tab.
+
+### Limitations / follow-ups
+- **Verify the `R32` arrangement** (in BOTH `_bracket.js` and `data.js`'s `KO_R32` — keep them in sync)
+  against the official bracket before relying on exact "could meet next" chains; the seeded default is
+  plausible but not authoritative.
+- Confirm football-data's real stage label for the 48-team R32 (`ROUND_OF_32` vs `LAST_32`) — both are
+  mapped now, but worth checking live.
+- KO goal-event detail isn't captured (the ESPN goals feed maps by `FIXTURES_INDEX` id; KO ids aren't
+  in it) — recaps have scorelines + pens but no scorers.
+
+---
+
+## Previous change
 **Goalscorer feed via ESPN's public API (no key) — layered on top of football-data.org.**
 
 ### Why / source choice
@@ -533,4 +611,10 @@ Untouched (donate/currency/pool infrastructure): `sweepstake/net.js` (`bumpDonat
 - **Self-host flag images** if offline robustness matters.
 
 ## Next step
-Deploy the wooden spoon feature: commit `sweepstake/data.js`, `sweepstake/screens2.jsx`, `PROGRESS.md`. Open Standings in production after deploy and confirm the new "Wooden Spoon odds" section renders below "Team win odds" with N players sorted by descending probability (probabilities sum to 100% across the pool).
+Edit the `R32` arrangement to the official WC2026 Round-of-32 draw in BOTH `netlify/functions/_bracket.js`
+and `sweepstake/data.js` (`KO_R32`) — keep them identical. Then deploy and (a) open the **Knockouts** tab
+to eyeball the roll-call + tie cards, and (b) trigger the morning snippet via Admin
+(`POST /api/generate-snippet`, force) during the knockouts to confirm the recap + conditional matchup
+teasers read well with the real `ANTHROPIC_API_KEY`. Files touched this session:
+`netlify/functions/_bracket.js` (new), `_snippetGenerator.js`, `_ingest.js`, `sweepstake/data.js`,
+`sweepstake/screens2.jsx`, `sweepstake/app.jsx`, `PROGRESS.md`.

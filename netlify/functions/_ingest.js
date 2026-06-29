@@ -29,7 +29,12 @@ async function fetchWithRetry(url, headers) {
 }
 
 const KO_ROUNDS = {
+  // WC2026's first knockout round is a Round of 32 — accept both labels
+  // football-data may use so its losers are eliminated (drives "teams left").
+  ROUND_OF_32: "R32",
+  LAST_32: "R32",
   ROUND_OF_16: "R16",
+  LAST_16: "R16",
   QUARTER_FINALS: "QF",
   SEMI_FINALS: "SF",
   FINAL: "F",
@@ -49,6 +54,7 @@ function defaultState() {
     teams: {},
     scores: {},
     goals: {},
+    koMatches: {},
     currentDay: 1,
   };
 }
@@ -212,15 +218,28 @@ export async function runIngest({ force = false } = {}) {
     const koRound = KO_ROUNDS[stage];
 
     if (koRound) {
-      // Knockout: drive eliminations. Group stage never eliminates.
+      // Knockout: drive eliminations (group stage never eliminates) AND record
+      // the result so the morning snippet can recap it. KO fixture ids aren't in
+      // FIXTURES_INDEX, so KO results live in their own map keyed by round + the
+      // two teams (orientation-stable from the feed); re-running overwrites.
       const winner = decideWinner(m.score);
-      if (winner === "HOME" || winner === "AWAY") {
-        const loser = winner === "HOME" ? away : home;
-        state.teams[loser] = { ...(state.teams[loser] || {}), status: "out", eliminatedRound: koRound };
-        eliminated.push(`${loser} out at ${koRound}`);
+      const pens = m.score?.penalties;
+      const rec = {
+        round: koRound, home, away, hs, as,
+        utcDate: m.utcDate || null,
+        winner: winner === "HOME" ? home : winner === "AWAY" ? away : null,
+        loser: winner === "HOME" ? away : winner === "AWAY" ? home : null,
+      };
+      if (pens && typeof pens.home === "number" && typeof pens.away === "number") {
+        rec.pens = { home: pens.home, away: pens.away };
       }
-      // Don't write KO scores to state.scores — those fixture ids aren't in FIXTURES yet.
-      warnings.push(`KO match seen (${koRound}): ${home}-${away} ${hs}-${as} — score not written; add KO fixtures when bracket finalises`);
+      state.koMatches = state.koMatches || {};
+      state.koMatches[`${koRound}:${home}-${away}`] = rec;
+      if (rec.loser) {
+        state.teams[rec.loser] = { ...(state.teams[rec.loser] || {}), status: "out", eliminatedRound: koRound };
+        eliminated.push(`${rec.loser} out at ${koRound}`);
+      }
+      scoresWritten.push(`KO ${koRound} ${home} ${hs}-${as} ${away}`);
       continue;
     }
 

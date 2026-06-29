@@ -15,10 +15,17 @@ import {
 } from "./_fixturesIndex.js";
 import { TEAMS_CATALOG, teamName } from "./_teamsCatalog.js";
 import { groupNonQualifiersFrom } from "./_oddsEngine.js";
+import { knockoutContext } from "./_bracket.js";
 
 const ANTHROPIC_URL = "https://api.anthropic.com/v1/messages";
 const MODEL = "claude-sonnet-4-6";
 const SCALE = 95; // mirrors sweepstake/data.js:SCALE for the odds engine
+
+// Short KO round codes (as stored by _ingest.js) → readable labels.
+const ROUND_LABELS = {
+  R32: "Round of 32", R16: "Round of 16", QF: "Quarter-final",
+  SF: "Semi-final", F: "Final", "3rd": "Third-place play-off",
+};
 
 // ---- UK wall-clock helpers --------------------------------------------------
 
@@ -131,6 +138,37 @@ export async function generateSnippet({ state, nowMs }) {
   const windowStartMs = ukWallClockToUtc(yesterdayUk, 8);
   const windowEndMs = nowMs;
 
+  // Helper closures over state (used by both the results recap and the
+  // knockout look-ahead, so defined up front).
+  const playerById = {};
+  for (const p of state.players) playerById[p.id] = p;
+  const assignments = state.draw.assignments || {};
+  const ownerOfCode = (code) => {
+    const pid = assignments[code];
+    return pid ? playerById[pid] : null;
+  };
+  const teamsOfPlayer = (pid) => Object.keys(assignments).filter(c => assignments[c] === pid);
+
+  // Knockout context: null during the group stage, otherwise the upcoming
+  // sudden-death ties and who each winner could meet next round.
+  const knockout = knockoutContext(state);
+  const inKnockout = !!knockout;
+
+  // Full roll-call of every player's surviving teams — fewest-remaining first
+  // so the report can lead with whoever's clinging on. Drives the "some players
+  // only have N teams left" angle once we're into the knockouts.
+  const playerStandings = state.players.map(p => {
+    const owned = teamsOfPlayer(p.id);
+    const alive = owned.filter(c => isAlive(state, c));
+    return {
+      name: p.name,
+      teamsAlive: alive.length,
+      teamsTotal: owned.length,
+      aliveTeams: alive.map(teamName),
+      out: owned.filter(c => !isAlive(state, c)).map(teamName),
+    };
+  }).sort((a, b) => a.teamsAlive - b.teamsAlive || b.teamsTotal - a.teamsTotal);
+
   // Fixtures finished in window AND with a recorded score.
   const matchesInWindow = [];
   for (const fx of FIXTURES_INDEX) {
@@ -143,15 +181,96 @@ export async function generateSnippet({ state, nowMs }) {
   }
   matchesInWindow.sort((a, b) => kickoffUtcMs(a.fx) - kickoffUtcMs(b.fx));
 
-  if (matchesInWindow.length === 0) {
-    return {
-      ok: true,
-      snippet: emptySnippet({
-        nowMs, windowStartMs, windowEndMs,
-        reason: "no-matches",
-        body: "Quiet night — no matches between 08:00 yesterday and now. Pour the kettle, the next round's coming.",
-      }),
+  // Knockout results that finished in the window. Their fixture ids aren't in
+  // FIXTURES_INDEX, so they live in state.koMatches; the real kickoff (utcDate
+  // from the feed) slots them into the same morning window as group games.
+  const koInWindow = inKnockout
+    ? Object.values(state.koMatches || {})
+        .filter(r => r.utcDate && Date.parse(r.utcDate) >= windowStartMs && Date.parse(r.utcDate) < windowEndMs)
+        .sort((a, b) => Date.parse(a.utcDate) - Date.parse(b.utcDate))
+    : [];
+
+  // Knockout recap: who went through, who's out, then the look-ahead.
+  if (inKnockout && koInWindow.length) {
+    const matches = koInWindow.map(r => {
+      const winnerCode = r.winner, loserCode = r.loser;
+      const result = r.hs > r.as ? "home" : r.hs < r.as ? "away"
+        : r.pens ? (r.pens.home > r.pens.away ? "home" : "away") : "draw";
+      return {
+        round: ROUND_LABELS[r.round] || r.round,
+        home: teamName(r.home), homeCode: r.home,
+        away: teamName(r.away), awayCode: r.away,
+        homeScore: r.hs, awayScore: r.as,
+        pens: r.pens ? `${r.pens.home}-${r.pens.away} on pens` : null,
+        homeOwner: ownerOfCode(r.home)?.name || null,
+        awayOwner: ownerOfCode(r.away)?.name || null,
+        result,
+        advanced: winnerCode ? { team: teamName(winnerCode), owner: ownerOfCode(winnerCode)?.name || null } : null,
+        knockedOut: loserCode ? { team: teamName(loserCode), owner: ownerOfCode(loserCode)?.name || null } : null,
+        upset: !!(winnerCode && loserCode &&
+          (TEAMS_CATALOG[winnerCode]?.fifa || 0) + 40 < (TEAMS_CATALOG[loserCode]?.fifa || 0)),
+      };
+    });
+
+    const touchedIds = new Set();
+    for (const r of koInWindow) {
+      const h = ownerOfCode(r.home); if (h) touchedIds.add(h.id);
+      const a = ownerOfCode(r.away); if (a) touchedIds.add(a.id);
+    }
+    const playersTouched = [...touchedIds].map(pid => ({
+      name: playerById[pid].name,
+      teamsAlive: teamsOfPlayer(pid).filter(c => isAlive(state, c)).length,
+      teamsOwned: teamsOfPlayer(pid).map(teamName),
+    }));
+
+    const ctx = {
+      poolName: state.poolName || "The Office Pool",
+      windowStartIso: new Date(windowStartMs).toISOString(),
+      windowEndIso: new Date(windowEndMs).toISOString(),
+      windowLabel: "08:00 UK yesterday → now",
+      stage: "knockout",
+      mode: "recap",
+      matches,
+      playersTouched,
+      playerStandings,
+      knockout,
+      priorHistory: {},
     };
+    return finishSnippet({
+      ctx, nowMs,
+      matchIds: koInWindow.map(r => `${r.round}:${r.home}-${r.away}`),
+      playersMentioned: playersTouched.map(p => p.name),
+    });
+  }
+
+  // Nothing finished overnight. During the knockouts we can still file a
+  // forward-looking report (who's left, what ties are coming); otherwise it's a
+  // genuinely quiet morning.
+  if (matchesInWindow.length === 0) {
+    if (!inKnockout || !knockout.ties?.length) {
+      return {
+        ok: true,
+        snippet: emptySnippet({
+          nowMs, windowStartMs, windowEndMs,
+          reason: "no-matches",
+          body: "Quiet night — no matches between 08:00 yesterday and now. Pour the kettle, the next round's coming.",
+        }),
+      };
+    }
+    const ctx = {
+      poolName: state.poolName || "The Office Pool",
+      windowStartIso: new Date(windowStartMs).toISOString(),
+      windowEndIso: new Date(windowEndMs).toISOString(),
+      windowLabel: "08:00 UK yesterday → now",
+      stage: "knockout",
+      mode: "lookahead",
+      matches: [],
+      playersTouched: [],
+      playerStandings,
+      knockout,
+      priorHistory: {},
+    };
+    return finishSnippet({ ctx, nowMs, matchIds: [], playersMentioned: [] });
   }
 
   // "Before" snapshot: only scores for fixtures that finished before windowStart.
@@ -168,16 +287,6 @@ export async function generateSnippet({ state, nowMs }) {
   const teamProbsAfter = teamWinProbsFrom(state, formMap(scoredAfter));
   const playerProbsBefore = playerWinProbsFrom(state, teamProbsBefore);
   const playerProbsAfter = playerWinProbsFrom(state, teamProbsAfter);
-
-  // Helper closures over state
-  const playerById = {};
-  for (const p of state.players) playerById[p.id] = p;
-  const assignments = state.draw.assignments || {};
-  const ownerOfCode = (code) => {
-    const pid = assignments[code];
-    return pid ? playerById[pid] : null;
-  };
-  const teamsOfPlayer = (pid) => Object.keys(assignments).filter(c => assignments[c] === pid);
 
   // Build per-match context.
   const matches = matchesInWindow.map(({ fx, sc }) => {
@@ -252,11 +361,25 @@ export async function generateSnippet({ state, nowMs }) {
     windowStartIso: new Date(windowStartMs).toISOString(),
     windowEndIso: new Date(windowEndMs).toISOString(),
     windowLabel: "08:00 UK yesterday → now",
+    stage: inKnockout ? "knockout" : "group",
+    mode: "recap",
     matches,
     playersTouched,
+    playerStandings,
+    knockout,
     priorHistory,
   };
 
+  return finishSnippet({
+    ctx, nowMs,
+    matchIds: matchesInWindow.map(m => m.fx.id),
+    playersMentioned: playersTouched.map(p => p.name),
+  });
+}
+
+// ---- LLM call / fallback (shared by the recap and look-ahead paths) ---------
+
+async function finishSnippet({ ctx, nowMs, matchIds, playersMentioned }) {
   // Bail with a deterministic fallback if no API key is configured (local dev,
   // env var not set yet, etc.) — surfaces clearly without erroring.
   const apiKey = process.env.ANTHROPIC_API_KEY;
@@ -269,30 +392,15 @@ export async function generateSnippet({ state, nowMs }) {
         windowEnd: ctx.windowEndIso,
         body: fallbackBody(ctx),
         model: "fallback-template",
-        matchIds: matchesInWindow.map(m => m.fx.id),
-        playersMentioned: playersTouched.map(p => p.name),
+        matchIds,
+        playersMentioned,
         source: null,
         warning: "ANTHROPIC_API_KEY not set — used template fallback.",
       },
     };
   }
 
-  // ---- LLM call ----
-  const systemPrompt = [
-    "You are the cheeky in-house pundit for a small office World Cup sweepstake.",
-    "Write a SHORT morning snippet (130–180 words, plain paragraphs, no markdown headers) summarising the matches in the input JSON.",
-    "Tone: playful, opinionated, lightly sarcastic — like a group-chat message from a friend who knows football.",
-    "Hard rules:",
-    "• Name-check EVERY player in `playersTouched` at least once. Use their name in possessive form when talking about their team(s) — e.g. \"Lisa's Argentina\".",
-    "• When two players' teams played each other, lean into the head-to-head: name both players, e.g. \"Cian vs Karen, and Cian's Brazil ran the show.\"",
-    "• If `priorHistory` contains earlier results that connect to today's storyline (e.g. a player's team is on a streak; the same two players' teams met before), weave in ONE callback. Don't force more than one.",
-    "• Mention probability swings using `playersTouched[].deltaPct` when it's notable (|delta| ≥ 1 percentage point). e.g. \"Karen's sweepstake odds nudged up 2pp.\" Don't over-quote numbers.",
-    "• If a match is flagged `upset: true`, call it out by name.",
-    "• Mention every match, even briefly. Lead with the most newsworthy result.",
-    "• Pure prose, no bullets, no headings, no emoji. Two short paragraphs is ideal.",
-    "• Don't invent facts. Only use what's in the JSON.",
-  ].join("\n");
-
+  const systemPrompt = buildSystemPrompt(ctx);
   const userMessage = JSON.stringify(ctx);
 
   let body;
@@ -331,11 +439,65 @@ export async function generateSnippet({ state, nowMs }) {
       windowEnd: ctx.windowEndIso,
       body,
       model: MODEL,
-      matchIds: matchesInWindow.map(m => m.fx.id),
-      playersMentioned: playersTouched.map(p => p.name),
+      matchIds,
+      playersMentioned,
       source: null,
     },
   };
+}
+
+function buildSystemPrompt(ctx) {
+  const lines = [
+    "You are the cheeky in-house pundit for a small office World Cup sweepstake.",
+  ];
+  if (ctx.stage === "knockout") {
+    lines.push(
+      "We are now in the KNOCKOUT STAGE — sudden death, no second chances. Lead with that energy: the group-stage cushion is gone and every player's hopes ride on a shrinking pile of teams.",
+      ctx.mode === "lookahead"
+        ? "No matches finished overnight, so this is a LOOK-AHEAD: skip the results recap and preview what's coming."
+        : "Write a SHORT morning snippet (150–220 words, plain paragraphs, no markdown headers): recap the knockout result(s) in `matches`, THEN look ahead to the ties to come.",
+    );
+  } else {
+    lines.push(
+      "Write a SHORT morning snippet (130–180 words, plain paragraphs, no markdown headers) summarising the matches in the input JSON.",
+    );
+  }
+  lines.push(
+    "Tone: playful, opinionated, lightly sarcastic — like a group-chat message from a friend who knows football.",
+    "Hard rules:",
+  );
+  if (ctx.matches?.length && ctx.stage === "knockout") {
+    lines.push(
+      "• Each item in `matches` is a knockout tie — make the drama of who's THROUGH and who's OUT the headline. `knockedOut` names the eliminated team and its owner (e.g. \"Tom's France are OUT\"); `advanced` names who goes through. If `pens` is set the tie went to penalties — say so.",
+      "• Name-check the owner of every team in `matches` (possessive form, e.g. \"Lisa's Argentina\"). Where two players' teams met, make it a personal head-to-head.",
+      "• If a tie is flagged `upset: true`, call it out by name.",
+    );
+  } else if (ctx.matches?.length) {
+    lines.push(
+      "• Name-check EVERY player in `playersTouched` at least once. Use their name in possessive form when talking about their team(s) — e.g. \"Lisa's Argentina\".",
+      "• When two players' teams played each other, lean into the head-to-head: name both players, e.g. \"Cian vs Karen, and Cian's Brazil ran the show.\"",
+      "• Mention probability swings using `playersTouched[].deltaPct` when it's notable (|delta| ≥ 1 percentage point). Don't over-quote numbers.",
+      "• If a match is flagged `upset: true`, call it out by name.",
+      "• Mention every match, even briefly. Lead with the most newsworthy result.",
+    );
+  }
+  if (ctx.stage === "knockout") {
+    lines.push(
+      "• Use `playerStandings` (sorted fewest-remaining first) for a quick survival roll-call. Spotlight anyone down to ONE or TWO teams — name them and the team(s) they're clinging to — and note anyone already wiped out. Don't list all-square players mechanically; make it a story.",
+      "• Use `knockout.ties` to preview the upcoming sudden-death matches, focusing on the ones involving players' teams. Where `ownerVsOwner` is true, hype the head-to-head by name.",
+      "• Use each tie's `couldMeetNext` to tease who the winner COULD face in the `nextRound` — e.g. \"win that and Cian's Portugal might be lying in wait\". Make clear these are conditional (if results go their way), not fixtures yet.",
+      "• Don't try to mention every tie — pick the juiciest two or three for the players.",
+    );
+  } else {
+    lines.push(
+      "• If `priorHistory` connects to today's storyline (a streak; the same two players' teams met before), weave in ONE callback. Don't force more than one.",
+    );
+  }
+  lines.push(
+    "• Pure prose, no bullets, no headings, no emoji. Two short paragraphs is ideal.",
+    "• Don't invent facts. Only use what's in the JSON. Team owners are in the JSON; unowned teams have a null owner — don't assign them to anyone.",
+  );
+  return lines.join("\n");
 }
 
 // ---- helpers ---------------------------------------------------------------
@@ -358,14 +520,36 @@ function emptySnippet({ nowMs, windowStartMs, windowEndMs, reason, body }) {
 }
 
 // Deterministic fallback so the UI shows something useful even without an
-// Anthropic key configured. One sentence per match.
+// Anthropic key configured. One sentence per match, plus a knockout roll-call
+// and tie preview once we're past the group stage.
 function fallbackBody(ctx) {
-  const lines = ctx.matches.map(m => {
-    const score = `${m.homeScore}-${m.awayScore}`;
-    const h = m.homeOwner ? `${m.homeOwner}'s ${m.home}` : m.home;
-    const a = m.awayOwner ? `${m.awayOwner}'s ${m.away}` : m.away;
-    const verb = m.result === "draw" ? "drew with" : m.result === "home" ? "beat" : "lost to";
-    return `${h} ${verb} ${a} ${score}.${m.upset ? " Upset!" : ""}`;
-  });
-  return `${lines.join(" ")} (Auto-generated fallback — set ANTHROPIC_API_KEY for the proper write-up.)`;
+  const parts = [];
+  if (ctx.matches?.length) {
+    const lines = ctx.matches.map(m => {
+      const score = `${m.homeScore}-${m.awayScore}${m.pens ? ` (${m.pens})` : ""}`;
+      const h = m.homeOwner ? `${m.homeOwner}'s ${m.home}` : m.home;
+      const a = m.awayOwner ? `${m.awayOwner}'s ${m.away}` : m.away;
+      const verb = m.result === "draw" ? "drew with" : m.result === "home" ? "beat" : "lost to";
+      const out = m.knockedOut ? ` ${m.knockedOut.owner ? m.knockedOut.owner + "'s " : ""}${m.knockedOut.team} out.` : "";
+      return `${h} ${verb} ${a} ${score}.${m.upset ? " Upset!" : ""}${out}`;
+    });
+    parts.push(lines.join(" "));
+  }
+
+  if (ctx.stage === "knockout") {
+    const roll = (ctx.playerStandings || [])
+      .map(p => `${p.name} ${p.teamsAlive}/${p.teamsTotal}`)
+      .join(", ");
+    if (roll) parts.push(`Still standing: ${roll}.`);
+
+    const ties = (ctx.knockout?.ties || []).filter(t => t.home?.owner || t.away?.owner).slice(0, 3);
+    const tieLines = ties.map(t => {
+      const h = t.home.owner ? `${t.home.owner}'s ${t.home.team}` : t.home.team;
+      const a = t.away.owner ? `${t.away.owner}'s ${t.away.team}` : t.away.team;
+      return `${h} vs ${a}`;
+    });
+    if (tieLines.length) parts.push(`${ctx.knockout.nextRound}: ${tieLines.join("; ")}.`);
+  }
+
+  return `${parts.join(" ")} (Auto-generated fallback — set ANTHROPIC_API_KEY for the proper write-up.)`;
 }
