@@ -4,6 +4,48 @@
 Ship the v1 sweepstake app in time for draw day on **2026-06-11**. The app is already deployed; ongoing work is incremental polish.
 
 ## Most recent change
+**Today page reworked for the knockouts; Knockouts tab removed; real KO schedule from the feed.**
+
+### Why
+With the group stage done, the main (Today) page was wrong: `liveDay()` clamps to matchday 1–17 and
+`fixturesOnDay()` only knows the 72 group fixtures, so it showed stale day-17 games. User wanted the
+main page to drop the results panel, show **today's fixtures then upcoming fixtures**, and move the
+"still standing" roll-call to **Standings** — making the dedicated Knockouts page redundant.
+
+### How
+- `_ingest.js`: now records EVERY knockout match (scheduled + finished), not just finished, into
+  `state.koMatches` keyed by the **football-data match id** (was `R32:HOME-AWAY`). Each entry:
+  `{ fdId, round, home, away (codes, null=TBD), utcDate, status, hs?, as?, winner?, loser?, pens? }`.
+  Finished ones still write the score, eliminate the loser, and feed the snippet recap. This gives the
+  app the real KO **schedule** (kickoff + teams) without any hardcoded bracket dates.
+- `_snippetGenerator.js`: KO recap filter now requires a finished score (`typeof r.hs === "number"`
+  + both teams known) since `koMatches` also holds scheduled fixtures.
+- `data.js`: removed the now-unused browser bracket mirror (`buildBracket`/`knockoutContext`/
+  `groupStandings` + `KO_R32`/`KO_FEEDS`/helpers). Added `koFixtures(state)` (date-sorted KO fixtures
+  from `state.koMatches`) and `koRoundLabel`. Server `_bracket.js` is untouched (still used by the snippet).
+- `screens1.jsx` **Today**: report → **Today's fixtures** → **Upcoming fixtures**. Dropped the
+  yesterday's-results panel and the prev/next-day navigator. KO mode pulls from `koFixtures` (today vs
+  upcoming by UK calendar day, TBD teams rendered as such, scores/pens when played); group stage falls
+  back to `fixturesOnDay(liveDay())` + next day. One unified `Row` renderer for both.
+- `screens2.jsx` **Standings**: added the **Still standing** survival roll-call (teams-remaining per
+  player, "last team"/"out" tags), shown once `groupStageComplete`.
+- Removed the **Knockouts** screen/tab (`screens2.jsx` component + `app.jsx` tab/screen wiring). Its
+  roll-call moved to Standings; its tie preview is now the Today "upcoming fixtures".
+
+### Verified
+- All changed `.js` pass `node --check`; all `.jsx` transform under esbuild. `data.js` loads in a shim;
+  `koFixtures` filters TBD-dated entries and surfaces finished + scheduled (incl. TBD-team) fixtures;
+  `window.SS` no longer exposes the removed bracket fns. Snippet KO recap (with pens/eliminations) and
+  look-ahead still render via the untouched server `_bracket.js`.
+
+### Note / limitation
+- "Today's"/"upcoming" KO fixtures depend on football-data returning scheduled KO matches with
+  `utcDate` (and teams for the next round; later rounds show TBD until results land). Only fully
+  exercised against the live feed once deployed.
+
+---
+
+## Previous change
 **Morning snippet pivots to the knockout stage — survival roll-call + conditional matchup teasers.**
 
 ### Why
@@ -87,7 +129,7 @@ only; KO was handled via Admin toggles / ingest eliminations).
 
 ---
 
-## Previous change
+## Earlier change
 **Goalscorer feed via ESPN's public API (no key) — layered on top of football-data.org.**
 
 ### Why / source choice

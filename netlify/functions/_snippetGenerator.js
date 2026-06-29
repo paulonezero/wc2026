@@ -186,7 +186,8 @@ export async function generateSnippet({ state, nowMs }) {
   // from the feed) slots them into the same morning window as group games.
   const koInWindow = inKnockout
     ? Object.values(state.koMatches || {})
-        .filter(r => r.utcDate && Date.parse(r.utcDate) >= windowStartMs && Date.parse(r.utcDate) < windowEndMs)
+        .filter(r => typeof r.hs === "number" && r.home && r.away &&
+          r.utcDate && Date.parse(r.utcDate) >= windowStartMs && Date.parse(r.utcDate) < windowEndMs)
         .sort((a, b) => Date.parse(a.utcDate) - Date.parse(b.utcDate))
     : [];
 

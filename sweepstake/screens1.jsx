@@ -3,6 +3,7 @@
    ========================================================================== */
 const { TEAMS: TM, GROUP_LETTERS, fixturesOnDay, fmtDate, fmtKo, dateForDay, liveDay, fmtPct: pct,
         ownerOf, teamByCode, teamsOfPlayer, splitCounts, TOTAL_DAYS,
+        groupStageComplete, koFixtures, koRoundLabel,
         tierLabel, tierSubtitle } = window.SS;
 
 /* ========================================================================== */
@@ -243,8 +244,6 @@ function DailySnippet({ snippet, players }) {
 /*  TODAY — daily hub: yesterday's results + today's fixtures                 */
 /* ========================================================================== */
 function Today({ state, go }) {
-  const today = liveDay();
-  const [viewDay, setViewDay] = useState(today);
   if (!state.draw.done) {
     const me = state.me ? state.players.find(p => p.id === state.me) : null;
     return <div className="fadein"><Empty title="The draw hasn't happened yet">
@@ -254,58 +253,72 @@ function Today({ state, go }) {
     </Empty></div>;
   }
 
-  const isLive = viewDay === today;
-  const todayFx = fixturesOnDay(viewDay);
-  const yestFx = fixturesOnDay(viewDay - 1).filter(f => state.scores[f.id]);
+  const inKO = groupStageComplete(state);
   const meTeams = state.me ? new Set(teamsOfPlayer(state, state.me)) : new Set();
-  const myTodayFx = state.me ? todayFx.filter(f => meTeams.has(f.home) || meTeams.has(f.away)) : [];
+  const ukDay = (ms) => new Date(ms).toLocaleDateString("en-CA", { timeZone: "Europe/London" });
+
+  // Normalise group + knockout fixtures into one shape for a single renderer:
+  // { id, home, away, score:{hs,as}|null, pens, winner, loser, timeLabel, dateLabel, sub }.
+  function normGroup(f) {
+    return { id: f.id, home: f.home, away: f.away, score: state.scores[f.id] || null,
+      pens: null, winner: null, loser: null,
+      timeLabel: fmtKo(f), dateLabel: fmtDate(f.day), sub: "Group " + f.group };
+  }
+  function normKo(f) {
+    const d = f.utcMs ? new Date(f.utcMs) : null;
+    return { id: f.id, home: f.home, away: f.away,
+      score: f.finished ? { hs: f.hs, as: f.as } : null, pens: f.pens, winner: f.winner, loser: f.loser,
+      timeLabel: d ? d.toLocaleTimeString("en-GB", { timeZone: "Europe/London", hour: "2-digit", minute: "2-digit" }) : "TBD",
+      dateLabel: d ? d.toLocaleDateString("en-GB", { timeZone: "Europe/London", weekday: "short", day: "numeric", month: "short" }) : "",
+      sub: koRoundLabel(f.round) };
+  }
+
+  let todayList = [], upcomingList = [];
+  if (inKO) {
+    const now = Date.now();
+    const todayUk = ukDay(now);
+    for (const f of koFixtures(state)) {
+      if (ukDay(f.utcMs) === todayUk) todayList.push(normKo(f));
+      else if (f.utcMs > now) upcomingList.push(normKo(f));
+    }
+    upcomingList = upcomingList.slice(0, 12);
+  } else {
+    const day = liveDay();
+    todayList = fixturesOnDay(day).map(normGroup);
+    upcomingList = fixturesOnDay(day + 1).map(normGroup);
+  }
+  const myToday = state.me ? todayList.filter(f => meTeams.has(f.home) || meTeams.has(f.away)) : [];
+  const dateStr = new Date().toLocaleDateString("en-GB", { timeZone: "Europe/London", weekday: "long", day: "numeric", month: "long" });
 
   function owners(code) {
     const o = ownerOf(state, code);
     return o ? <Owner player={o} size={20} you={o.id === state.me} /> : <span className="mono muted" style={{ fontSize: 11 }}>unowned</span>;
   }
 
-  function ResultRow(f) {
-    const sc = state.scores[f.id];
-    const h = teamByCode(f.home), a = teamByCode(f.away);
-    const hw = sc.hs > sc.as, aw = sc.as > sc.hs, draw = sc.hs === sc.as;
-    const winner = hw ? h : aw ? a : null;
-    const loser = hw ? a : aw ? h : null;
-    const upset = winner && loser && winner.fifa < loser.fifa - 40;
+  function Row(f, showDate) {
+    const h = f.home ? teamByCode(f.home) : null;
+    const a = f.away ? teamByCode(f.away) : null;
+    const sc = f.score;
+    const hw = sc ? (f.winner ? f.winner === f.home : sc.hs > sc.as) : false;
+    const aw = sc ? (f.winner ? f.winner === f.away : sc.as > sc.hs) : false;
+    const tbd = <div className="display" style={{ fontSize: 15, textTransform: "uppercase", opacity: .4 }}>TBD</div>;
     return (
       <div key={f.id} className="matchrow">
         <div className="mt-side" style={{ alignItems: "flex-end" }}>
-          <MatchTeam team={h} align="right" strong={hw} dim={aw} />
-          <div style={{ marginTop: 6 }}>{owners(f.home)}</div>
+          {h ? <MatchTeam team={h} align="right" strong={hw} dim={aw} /> : tbd}
+          <div style={{ marginTop: 6 }}>{f.home ? owners(f.home) : null}</div>
         </div>
         <div className="mt-mid">
-          <div className="scorebox">{sc.hs}<span>–</span>{sc.as}</div>
-          {upset ? <div className="upset">⚡ Upset</div> : <div className="mono muted" style={{ fontSize: 10, marginTop: 4 }}>{draw ? "Draw" : "FT"}</div>}
+          {sc ? <div className="scorebox">{sc.hs}<span>–</span>{sc.as}</div>
+              : <div className="kotime">{f.timeLabel}</div>}
+          <div className="mono muted" style={{ fontSize: 10, marginTop: 4 }}>
+            {sc ? (f.pens ? `${f.pens.home}–${f.pens.away} pens` : f.sub)
+                : (showDate && f.dateLabel ? f.dateLabel + " · " : "") + f.sub}
+          </div>
         </div>
         <div className="mt-side">
-          <MatchTeam team={a} align="left" strong={aw} dim={hw} />
-          <div style={{ marginTop: 6 }}>{owners(f.away)}</div>
-        </div>
-      </div>
-    );
-  }
-  function FixtureRow(f) {
-    const sc = state.scores[f.id];
-    const h = teamByCode(f.home), a = teamByCode(f.away);
-    return (
-      <div key={f.id} className="matchrow">
-        <div className="mt-side" style={{ alignItems: "flex-end" }}>
-          <MatchTeam team={h} align="right" />
-          <div style={{ marginTop: 6 }}>{owners(f.home)}</div>
-        </div>
-        <div className="mt-mid">
-          {sc ? <div className="scorebox live">{sc.hs}<span>–</span>{sc.as}</div>
-              : <div className="kotime">{fmtKo(f)}</div>}
-          <div className="mono muted" style={{ fontSize: 10, marginTop: 4 }}>{sc ? "Live/FT" : "Group " + f.group}</div>
-        </div>
-        <div className="mt-side">
-          <MatchTeam team={a} align="left" />
-          <div style={{ marginTop: 6 }}>{owners(f.away)}</div>
+          {a ? <MatchTeam team={a} align="left" strong={aw} dim={hw} /> : tbd}
+          <div style={{ marginTop: 6 }}>{f.away ? owners(f.away) : null}</div>
         </div>
       </div>
     );
@@ -313,56 +326,43 @@ function Today({ state, go }) {
 
   return (
     <div className="fadein">
-      {/* day header */}
-      <div className="row" style={{ justifyContent: "space-between", flexWrap: "wrap", gap: 12, marginBottom: 20 }}>
-        <div>
-          <div className="row" style={{ gap: 10 }}>
-            <div className="display" style={{ fontSize: "clamp(26px,5.5vw,34px)", textTransform: "uppercase" }}>
-              {isLive ? "Today" : "Matchday " + viewDay}
-            </div>
-            {isLive && <span className="tag" style={{ background: "var(--pop)", color: "#fff", borderColor: "var(--ink)" }}>Live</span>}
-          </div>
-          <div className="muted" style={{ fontSize: 14 }}>Matchday {viewDay} · {fmtDate(viewDay)} · group stage</div>
+      {/* header */}
+      <div style={{ marginBottom: 20 }}>
+        <div className="row" style={{ gap: 10 }}>
+          <div className="display" style={{ fontSize: "clamp(26px,5.5vw,34px)", textTransform: "uppercase" }}>Today</div>
+          <span className="tag" style={{ background: "var(--pop)", color: "#fff", borderColor: "var(--ink)" }}>Live</span>
         </div>
-        <div className="row" style={{ gap: 8 }}>
-          <Btn kind="ghost" size="sm" onClick={() => setViewDay(d => Math.max(1, d - 1))} disabled={viewDay <= 1}>← Prev day</Btn>
-          {!isLive && <Btn kind="ink" size="sm" onClick={() => setViewDay(today)}>Jump to today</Btn>}
-          <Btn kind="ghost" size="sm" onClick={() => setViewDay(d => Math.min(TOTAL_DAYS, d + 1))} disabled={viewDay >= TOTAL_DAYS}>Next day →</Btn>
-        </div>
+        <div className="muted" style={{ fontSize: 14 }}>{dateStr} · {inKO ? "knockout stage — sudden death" : "group stage"}</div>
       </div>
 
       {/* morning snippet (cron- or admin-generated) */}
-      {isLive && <DailySnippet snippet={state.snippet} players={state.players} />}
+      <DailySnippet snippet={state.snippet} players={state.players} />
 
       {/* your teams today */}
-      {state.me && myTodayFx.length > 0 &&
+      {myToday.length > 0 &&
         <div className="card" style={{ background: "var(--gold)", padding: "14px 18px", marginBottom: 22,
           display: "flex", alignItems: "center", gap: 14, flexWrap: "wrap" }}>
           <span className="display" style={{ fontSize: 16, textTransform: "uppercase" }}>Your teams out today</span>
           <div className="teamchips">
-            {myTodayFx.flatMap(f => [f.home, f.away]).filter(c => meTeams.has(c))
+            {myToday.flatMap(f => [f.home, f.away]).filter(c => meTeams.has(c))
               .map(c => <TeamChip key={c} team={teamByCode(c)} />)}
           </div>
         </div>}
 
-      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 22, alignItems: "start" }} className="today-grid">
-        {/* yesterday */}
-        <div>
-          <SectLabel>{isLive ? "Yesterday's results" : "Day " + (viewDay - 1) + " results"} · {viewDay > 1 ? fmtDate(viewDay - 1) : "—"}</SectLabel>
-          {yestFx.length === 0
-            ? <div className="panel muted" style={{ textAlign: "center", padding: 28 }}>No results to show for the day before.</div>
-            : <div className="card" style={{ padding: 6 }}>{yestFx.map(ResultRow)}</div>}
-        </div>
-        {/* today */}
-        <div>
-          <SectLabel>{isLive ? "Today's fixtures" : "Day " + viewDay + " fixtures"} · {fmtDate(viewDay)}</SectLabel>
-          {todayFx.length === 0
-            ? <div className="panel muted" style={{ textAlign: "center", padding: 28 }}>No matches scheduled.</div>
-            : <div className="card" style={{ padding: 6 }}>{todayFx.map(FixtureRow)}</div>}
-          <div className="row" style={{ justifyContent: "center", marginTop: 16 }}>
-            <Btn kind="lime" onClick={() => go("standings")}>See the standings →</Btn>
+      <SectLabel>Today's fixtures</SectLabel>
+      {todayList.length === 0
+        ? <div className="panel muted" style={{ textAlign: "center", padding: 28, marginBottom: 24 }}>No matches today.</div>
+        : <div className="card" style={{ padding: 6, marginBottom: 24 }}>{todayList.map(f => Row(f, false))}</div>}
+
+      <SectLabel>Upcoming fixtures</SectLabel>
+      {upcomingList.length === 0
+        ? <div className="panel muted" style={{ textAlign: "center", padding: 28 }}>
+            {inKO ? "The next round's fixtures appear here once the feed has them." : "Nothing scheduled."}
           </div>
-        </div>
+        : <div className="card" style={{ padding: 6 }}>{upcomingList.map(f => Row(f, true))}</div>}
+
+      <div className="row" style={{ justifyContent: "center", marginTop: 18 }}>
+        <Btn kind="lime" onClick={() => go("standings")}>See the standings →</Btn>
       </div>
     </div>
   );
