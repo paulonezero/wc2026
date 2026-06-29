@@ -73,6 +73,21 @@
     T("New Zealand","NZL","OFC",1281,"G","#000000","#ffffff","nz"),
   ];
 
+  // FIFA/Coca-Cola men's WORLD-RANKING position (not points) for each team —
+  // 11 Jun 2026 ranking, the same snapshot the points above come from. Shown
+  // under the team name in the UI. Order is fully consistent with the points:
+  // a team on more points always sits at a better (lower) world rank; the gaps
+  // are the non-qualified nations (Italy 12, Denmark 21, Nigeria 26, …) sitting
+  // in between. NOTE: keep in sync with TEAMS / _teamsCatalog.js when editing.
+  const WORLD_RANK = {
+    ARG:1,  ESP:2,  FRA:3,  ENG:4,  POR:5,  BRA:6,  MAR:7,  NED:8,  BEL:9,  GER:10,
+    CRO:11, COL:13, MEX:14, SEN:15, URU:16, USA:17, JPN:18, SUI:19, IRN:20, TUR:22,
+    ECU:23, AUT:24, KOR:25, AUS:27, ALG:28, EGY:29, CAN:30, NOR:31, CIV:33, PAN:34,
+    SWE:38, CZE:40, PAR:41, SCO:42, TUN:45, COD:46, UZB:50, QAT:56, IRQ:57, RSA:60,
+    KSA:61, JOR:63, BIH:64, CPV:67, GHA:73, CUW:82, HAI:83, NZL:85,
+  };
+  TEAMS.forEach(t => { t.worldRank = WORLD_RANK[t.code] || null; });
+
   /* ---- 12 groups A–L (official 2026 draw; set per team above) ----------- */
   const GROUP_LETTERS = "ABCDEFGHIJKL".split("");
 

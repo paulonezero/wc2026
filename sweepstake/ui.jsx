@@ -31,6 +31,7 @@ function Sticker({ team, rank, prob, status = "alive", champion = false, owner =
         <span>{CONFED_LABEL[team.confed]}</span>
         {prob != null && <span className="odd">{fmtPct(prob)}</span>}
       </div>
+      {team.worldRank && <div className="wrank">#{team.worldRank} in the world</div>}
     </div>
   );
 }
@@ -123,9 +124,13 @@ function MatchTeam({ team, align = "left", strong = false, dim = false }) {
     <div className="row" style={{ gap: 10, flexDirection: align === "right" ? "row-reverse" : "row",
       opacity: dim ? .5 : 1, minWidth: 0 }}>
       <div style={{ width: 42, flex: "none" }}><Crest team={team} h={30} fs={14} /></div>
-      <div className="display" style={{ fontSize: 15, textTransform: "uppercase", lineHeight: 1,
-        fontWeight: strong ? 800 : 700, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis",
-        textAlign: align }}>{team.name}</div>
+      <div style={{ minWidth: 0, display: "flex", flexDirection: "column", gap: 3,
+        alignItems: align === "right" ? "flex-end" : "flex-start" }}>
+        <div className="display" style={{ fontSize: 15, textTransform: "uppercase", lineHeight: 1,
+          fontWeight: strong ? 800 : 700, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis",
+          maxWidth: "100%", textAlign: align }}>{team.name}</div>
+        {team.worldRank && <div className="mrank" style={{ textAlign: align }}>#{team.worldRank} in the world</div>}
+      </div>
     </div>
   );
 }

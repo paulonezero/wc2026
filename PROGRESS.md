@@ -687,3 +687,17 @@ Two fixes to the morning snippet:
 Files touched: `sweepstake/screens2.jsx`, `netlify/functions/_snippetGenerator.js`,
 `netlify/functions/_notify.js`, `netlify/functions/pool.js`,
 `netlify/functions/_ingest.js`, `sweepstake/store.js`.
+
+## FIFA world ranking under team names (this session)
+Added each team's real FIFA men's world-ranking position, shown under the name
+on the Sticker card (e.g. "SPAIN / UEFA · 18.2% / #2 in the world").
+- `sweepstake/data.js`: new `WORLD_RANK` map (code → position) assigned to
+  `t.worldRank`. Positions are the 11 Jun 2026 FIFA ranking (ESPN top-50 +
+  Sofascore for 50–85), the same snapshot as the existing `fifa` points. Fully
+  consistent with points order; gaps are non-qualified nations (Italy 12,
+  Denmark 21, Nigeria 26, …). Verified: all 48 codes present, no dup codes/positions.
+- `sweepstake/ui.jsx`: Sticker renders `#{worldRank} in the world` under `.meta`.
+  (Distinct from the existing `.rank` corner badge = odds/spoon rank.)
+- `sweepstake/styles.css`: `.sticker .wrank` mono caption + small gold dot.
+Sources: ESPN "FIFA Men's Top 50: June 2026"; Sofascore FIFA rankings.
+Not added to fixture rows (MatchTeam) — only the team cards, matching the ask.
