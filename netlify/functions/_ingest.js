@@ -198,52 +198,61 @@ export async function runIngest({ force = false } = {}) {
   let goalsWritten = 0;
 
   for (const m of matches) {
-    if (m.status !== "FINISHED") continue;
-
     const home = codeFromName(m.homeTeam?.name);
     const away = codeFromName(m.awayTeam?.name);
+    const koRound = KO_ROUNDS[m.stage];
+
+    if (koRound) {
+      // Knockout: record EVERY KO match — scheduled or finished — so the app
+      // has the real bracket schedule (kickoff + teams) to show, and so the
+      // morning snippet can recap finished ones. KO fixture ids aren't in
+      // FIXTURES_INDEX, so KO matches live in their own map keyed by the stable
+      // football-data match id (re-running overwrites). Teams may be null while
+      // the bracket hasn't filled (TBD beyond the next round). Finished matches
+      // also write the score, decide the winner, and eliminate the loser.
+      const finished = m.status === "FINISHED";
+      const hs = m.score?.fullTime?.home;
+      const as = m.score?.fullTime?.away;
+      const rec = {
+        fdId: m.id,
+        round: koRound,
+        home: home || null,
+        away: away || null,
+        utcDate: m.utcDate || null,
+        status: m.status || null,
+      };
+      if (finished && typeof hs === "number" && typeof as === "number") {
+        const winner = decideWinner(m.score);
+        const pens = m.score?.penalties;
+        rec.hs = hs; rec.as = as;
+        rec.winner = winner === "HOME" ? home : winner === "AWAY" ? away : null;
+        rec.loser = winner === "HOME" ? away : winner === "AWAY" ? home : null;
+        if (pens && typeof pens.home === "number" && typeof pens.away === "number") {
+          rec.pens = { home: pens.home, away: pens.away };
+        }
+        if (rec.loser) {
+          state.teams[rec.loser] = { ...(state.teams[rec.loser] || {}), status: "out", eliminatedRound: koRound };
+          eliminated.push(`${rec.loser} out at ${koRound}`);
+        }
+        scoresWritten.push(`KO ${koRound} ${home} ${hs}-${as} ${away}`);
+      }
+      state.koMatches = state.koMatches || {};
+      state.koMatches[String(m.id)] = rec;
+      continue;
+    }
+
+    // Group stage — only finished matches with known teams + a score matter.
+    if (m.status !== "FINISHED") continue;
     if (!home || !away) {
       warnings.push(`unknown team: home="${m.homeTeam?.name}" away="${m.awayTeam?.name}"`);
       continue;
     }
-
     const hs = m.score?.fullTime?.home;
     const as = m.score?.fullTime?.away;
     if (typeof hs !== "number" || typeof as !== "number") {
       warnings.push(`no fullTime score: ${home} vs ${away}`);
       continue;
     }
-
-    const stage = m.stage;
-    const koRound = KO_ROUNDS[stage];
-
-    if (koRound) {
-      // Knockout: drive eliminations (group stage never eliminates) AND record
-      // the result so the morning snippet can recap it. KO fixture ids aren't in
-      // FIXTURES_INDEX, so KO results live in their own map keyed by round + the
-      // two teams (orientation-stable from the feed); re-running overwrites.
-      const winner = decideWinner(m.score);
-      const pens = m.score?.penalties;
-      const rec = {
-        round: koRound, home, away, hs, as,
-        utcDate: m.utcDate || null,
-        winner: winner === "HOME" ? home : winner === "AWAY" ? away : null,
-        loser: winner === "HOME" ? away : winner === "AWAY" ? home : null,
-      };
-      if (pens && typeof pens.home === "number" && typeof pens.away === "number") {
-        rec.pens = { home: pens.home, away: pens.away };
-      }
-      state.koMatches = state.koMatches || {};
-      state.koMatches[`${koRound}:${home}-${away}`] = rec;
-      if (rec.loser) {
-        state.teams[rec.loser] = { ...(state.teams[rec.loser] || {}), status: "out", eliminatedRound: koRound };
-        eliminated.push(`${rec.loser} out at ${koRound}`);
-      }
-      scoresWritten.push(`KO ${koRound} ${home} ${hs}-${as} ${away}`);
-      continue;
-    }
-
-    // Group stage
     const etDate = etDateFromUtc(m.utcDate);
     const fxId = findFixtureId(etDate, home, away);
     if (!fxId) {
