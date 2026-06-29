@@ -338,27 +338,45 @@
 
   /* ---- knockout bracket --------------------------------------------------
      Browser mirror of netlify/functions/_bracket.js. WC2026 sends 32 teams into
-     a single-elimination bracket (R32 → R16 → QF → SF → Final). The 16 R32
-     pairings are hardcoded as editable slot tokens; the rest of the tree is
-     derived positionally from that list's order.
+     a single-elimination bracket (R32 → R16 → QF → SF → Final). The structure
+     below is the OFFICIAL bracket (FIFA matches 73–103): R32 slots are group
+     winners (1X) / runners-up (2X) / a third-placed team from a candidate set,
+     and the feed tree is the official (irregular) pairing.
 
-     IMPORTANT: keep this in sync with _bracket.js (R32 arrangement + resolution). */
+     IMPORTANT: keep this IDENTICAL to _bracket.js (R32 slots, FEEDS, resolution).
+     If FIFA revise the bracket, edit both files together. */
 
-  // EDIT to match the official R32 draw. Tokens: "1X"/"2X" = winner/runner-up of
-  // group X; "T1".."T8" = best third-placed teams (T1 = best). List order defines
-  // the tree: winners of R32[0] and R32[1] meet in the first R16 tie, etc.
+  // R32 (FIFA matches 73–88); internal ids 1..16. Slot tokens: "1X"/"2X" =
+  // winner/runner-up of group X; { t:[...] } = third-placed team from one of the
+  // listed candidate groups.
   const KO_R32 = [
-    { home: "1A", away: "T1" }, { home: "1B", away: "T2" },
-    { home: "1C", away: "T3" }, { home: "1D", away: "T4" },
-    { home: "1E", away: "T5" }, { home: "1F", away: "T6" },
-    { home: "1G", away: "T7" }, { home: "1H", away: "T8" },
-    { home: "1I", away: "2A" }, { home: "1J", away: "2B" },
-    { home: "1K", away: "2C" }, { home: "1L", away: "2D" },
-    { home: "2E", away: "2I" }, { home: "2F", away: "2J" },
-    { home: "2G", away: "2K" }, { home: "2H", away: "2L" },
+    { home: "2A", away: "2B" },                          // 73
+    { home: "1E", away: { t: ["A", "B", "C", "D", "F"] } }, // 74
+    { home: "1F", away: "2C" },                          // 75
+    { home: "1C", away: "2F" },                          // 76
+    { home: "1I", away: { t: ["C", "D", "F", "G", "H"] } }, // 77
+    { home: "2E", away: "2I" },                          // 78
+    { home: "1A", away: { t: ["C", "E", "F", "H", "I"] } }, // 79
+    { home: "1L", away: { t: ["E", "H", "I", "J", "K"] } }, // 80
+    { home: "1D", away: { t: ["B", "E", "F", "I", "J"] } }, // 81
+    { home: "1G", away: { t: ["A", "E", "H", "I", "J"] } }, // 82
+    { home: "2K", away: "2L" },                          // 83
+    { home: "1H", away: "2J" },                          // 84
+    { home: "1B", away: { t: ["E", "F", "G", "I", "J"] } }, // 85
+    { home: "1J", away: "2H" },                          // 86
+    { home: "1K", away: { t: ["D", "E", "I", "J", "L"] } }, // 87
+    { home: "2D", away: "2G" },                          // 88
   ];
+  // Official feed tree (ids): R16 17..24, QF 25..28, SF 29..30, F 31.
+  const KO_FEEDS = {
+    17: [2, 5], 18: [1, 3], 19: [4, 6], 20: [7, 8],
+    21: [11, 12], 22: [9, 10], 23: [14, 16], 24: [13, 15],
+    25: [17, 18], 26: [21, 22], 27: [19, 20], 28: [23, 24],
+    29: [25, 26], 30: [27, 28], 31: [29, 30],
+  };
   const KO_ROUND_LABEL = { R32: "Round of 32", R16: "Round of 16", QF: "Quarter-final", SF: "Semi-final", F: "Final" };
   const KO_ROUND_IDX = { R32: 0, R16: 1, QF: 2, SF: 3, F: 4 };
+  const koRoundOfId = (id) => id <= 16 ? "R32" : id <= 24 ? "R16" : id <= 28 ? "QF" : id <= 30 ? "SF" : "F";
 
   // Per-group order (best→worst) + the 8 best third-placed codes. Same tiebreak
   // as groupNonQualifiers: points, GD, goals scored, then FIFA rank.
@@ -383,14 +401,31 @@
     return { byGroup, bestThirds: thirds.slice(0, 8).map(t => t.code) };
   }
 
-  function koResolveToken(tok, stand) {
-    let m;
-    if ((m = /^([12])([A-Z])$/.exec(tok))) {
-      const pos = m[1] === "1" ? 0 : 1;
-      return stand.byGroup[m[2]] && stand.byGroup[m[2]][pos] ? stand.byGroup[m[2]][pos].code : null;
-    }
-    if ((m = /^T([1-8])$/.exec(tok))) return stand.bestThirds[Number(m[1]) - 1] || null;
-    return null;
+  // Assign qualifying third-placed groups to the third slots by candidate sets
+  // (constrained backtracking — reproduces FIFA's table when the matching is
+  // unique). Returns { slotId → group } or {}.
+  function koAssignThirds(slots, qualGroups) {
+    const avail = {}; qualGroups.forEach(g => avail[g] = 1);
+    const out = {};
+    const bt = (i) => {
+      if (i >= slots.length) return true;
+      const s = slots[i];
+      for (const g of s.cand) {
+        if (!avail[g]) continue;
+        avail[g] = 0; out[s.id] = g;
+        if (bt(i + 1)) return true;
+        avail[g] = 1; delete out[s.id];
+      }
+      return false;
+    };
+    return bt(0) ? out : {};
+  }
+
+  function koResolveGroupTok(tok, stand) {
+    const m = /^([12])([A-Z])$/.exec(tok);
+    if (!m) return null;
+    const pos = m[1] === "1" ? 0 : 1;
+    return stand.byGroup[m[2]] && stand.byGroup[m[2]][pos] ? stand.byGroup[m[2]][pos].code : null;
   }
 
   // Did `code` survive past round `roundIdx`? Alive (or eliminated later) = yes;
@@ -408,18 +443,34 @@
   function buildBracket(state) {
     if (!groupStageComplete(state)) return null;
     const stand = groupStandings(state);
+
+    const thirdCodeOfGroup = {};
+    stand.bestThirds.forEach(code => { const t = teamByCode(code); if (t) thirdCodeOfGroup[t.group] = code; });
+    const thirdSlots = [];
+    KO_R32.forEach((m, i) => { if (m.away && typeof m.away === "object") thirdSlots.push({ id: i + 1, cand: m.away.t }); });
+    const thirdGroupOfSlot = koAssignThirds(thirdSlots, Object.keys(thirdCodeOfGroup));
+
     const matches = [];
     KO_R32.forEach((m, i) => matches.push({ id: i + 1, round: "R32", homeTok: m.home, awayTok: m.away }));
-    const addRound = (round, count, startId, srcStart) => {
-      for (let i = 0; i < count; i++) matches.push({ id: startId + i, round, homeSrc: srcStart + 2 * i, awaySrc: srcStart + 2 * i + 1 });
-    };
-    addRound("R16", 8, 17, 1); addRound("QF", 4, 25, 17); addRound("SF", 2, 29, 25); addRound("F", 1, 31, 29);
+    Object.keys(KO_FEEDS).map(Number).forEach(id => {
+      matches.push({ id, round: koRoundOfId(id), homeSrc: KO_FEEDS[id][0], awaySrc: KO_FEEDS[id][1] });
+    });
+    matches.sort((a, b) => a.id - b.id);
+
     const byId = {}; matches.forEach(m => byId[m.id] = m);
     matches.forEach(m => { if (m.homeSrc) byId[m.homeSrc].feedsId = m.id; if (m.awaySrc) byId[m.awaySrc].feedsId = m.id; });
+
     const winners = {};
     matches.forEach(m => {
-      if (m.round === "R32") { m.home = koResolveToken(m.homeTok, stand); m.away = koResolveToken(m.awayTok, stand); }
-      else { m.home = winners[m.homeSrc] || null; m.away = winners[m.awaySrc] || null; }
+      if (m.round === "R32") {
+        m.home = koResolveGroupTok(m.homeTok, stand);
+        if (m.awayTok && typeof m.awayTok === "object") {
+          const g = thirdGroupOfSlot[m.id];
+          m.away = g ? thirdCodeOfGroup[g] : null;
+        } else {
+          m.away = koResolveGroupTok(m.awayTok, stand);
+        }
+      } else { m.home = winners[m.homeSrc] || null; m.away = winners[m.awaySrc] || null; }
       let winner = null, loser = null;
       if (m.home && m.away) {
         const ridx = KO_ROUND_IDX[m.round];

@@ -14,10 +14,13 @@ that the bracket is known. The blocker was that no knockout bracket existed in c
 only; KO was handled via Admin toggles / ingest eliminations).
 
 ### Decisions
-- **Hardcode the real KO fixtures** (user choice) rather than derive R32 pairings from standings —
-  avoids encoding FIFA's ~495-combination best-thirds allocation table. The 16 R32 pairings live as
-  an **editable slot-token arrangement** (`R32` in `_bracket.js`); the rest of the tree (R16→Final)
-  is derived **positionally** from that list's order.
+- Encode the **official FIFA bracket** (matches 73–103): R32 slots are group winners (`1X`),
+  runners-up (`2X`), or a third-placed team from a fixed **candidate-group set**; the feed tree is the
+  official (irregular) pairing, NOT a naive sequential bracket. Winners/runners-up resolve directly from
+  local group standings. The eight third-placed slots are filled by **constrained matching** of the
+  qualifying third-groups to the slots' candidate sets — reproduces FIFA's 495-combination table when
+  the matching is unique (see `assignThirds`). Slot map + candidate sets + feed tree sourced from
+  Wikipedia "2026 FIFA World Cup knockout stage".
 - **Full roll-call** of every player's surviving-team count (fewest-first), not just players whose
   teams played in the window.
 
@@ -71,9 +74,12 @@ only; KO was handled via Admin toggles / ingest eliminations).
 - Group-stage (incomplete) path unchanged: `knockout` null, normal recap, no roll-call, no Knockouts tab.
 
 ### Limitations / follow-ups
-- **Verify the `R32` arrangement** (in BOTH `_bracket.js` and `data.js`'s `KO_R32` — keep them in sync)
-  against the official bracket before relying on exact "could meet next" chains; the seeded default is
-  plausible but not authoritative.
+- **Third-placed slotting** uses constrained matching, exact only when the perfect matching is unique
+  for the actual qualifying combination. If FIFA's published table picks a different valid assignment,
+  up to the 8 winner-vs-third R32 matchups could be slotted differently (the 24 winner/runner-up slots
+  and the whole feed tree are exact regardless). Worth eyeballing the 8 winner-vs-third ties vs the
+  official bracket once teams are in. `_bracket.js` and `data.js`'s `KO_R32`/`KO_FEEDS` must stay
+  identical — edit both together if FIFA revise anything.
 - Confirm football-data's real stage label for the 48-team R32 (`ROUND_OF_32` vs `LAST_32`) — both are
   mapped now, but worth checking live.
 - KO goal-event detail isn't captured (the ESPN goals feed maps by `FIXTURES_INDEX` id; KO ids aren't
@@ -611,10 +617,10 @@ Untouched (donate/currency/pool infrastructure): `sweepstake/net.js` (`bumpDonat
 - **Self-host flag images** if offline robustness matters.
 
 ## Next step
-Edit the `R32` arrangement to the official WC2026 Round-of-32 draw in BOTH `netlify/functions/_bracket.js`
-and `sweepstake/data.js` (`KO_R32`) — keep them identical. Then deploy and (a) open the **Knockouts** tab
-to eyeball the roll-call + tie cards, and (b) trigger the morning snippet via Admin
-(`POST /api/generate-snippet`, force) during the knockouts to confirm the recap + conditional matchup
-teasers read well with the real `ANTHROPIC_API_KEY`. Files touched this session:
+Official WC2026 bracket (matches 73–103) is now encoded in both `_bracket.js` and `data.js`. Deploy and
+(a) open the **Knockouts** tab to eyeball the roll-call + tie cards, eyeballing the 8 winner-vs-third
+ties against the official bracket (third slotting is heuristic — see Limitations), and (b) trigger the
+morning snippet via Admin (`POST /api/generate-snippet`, force) during the knockouts to confirm the recap
++ conditional matchup teasers read well with the real `ANTHROPIC_API_KEY`. Files touched this session:
 `netlify/functions/_bracket.js` (new), `_snippetGenerator.js`, `_ingest.js`, `sweepstake/data.js`,
 `sweepstake/screens2.jsx`, `sweepstake/app.jsx`, `PROGRESS.md`.

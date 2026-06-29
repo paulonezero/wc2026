@@ -7,13 +7,18 @@
 // could meet next round if it wins* — annotated with the sweepstake owner of
 // each team so the report can tease the rivalries that might happen.
 //
-// The 16 Round-of-32 pairings are hardcoded below as an editable arrangement of
-// "slot tokens" (group winners / runners-up / best thirds). The rest of the
-// tree (R16, QF, SF, Final) is derived positionally from the ORDER of that
-// list. Slot tokens resolve to concrete teams from the local group standings;
-// later-round participants resolve as winners are decided. Nothing here needs
-// the football-data API — group qualification is fully derivable from the
-// scores the app already holds (same philosophy as data.js:groupNonQualifiers).
+// The structure below is the OFFICIAL bracket (FIFA matches 73–103):
+//   - R32 (matches 73–88): each slot is a group winner (1X), runner-up (2X) or
+//     a third-placed team from one of a fixed set of candidate groups.
+//   - The feed tree (which winners advance into which later match) is the
+//     official, irregular pairing — NOT a naive sequential bracket.
+// Group winners/runners-up resolve directly from local group standings. The
+// eight third-placed slots are filled by matching the eight qualifying
+// third-placed groups to the slots' candidate sets (FIFA publishes the exact
+// 495-combination table; we reproduce it with a constrained matching, which is
+// correct whenever the matching is unique — see assignThirds). Nothing here
+// needs the football-data API: qualification is derivable from the scores the
+// app already holds (same philosophy as data.js:groupNonQualifiers).
 
 import { FIXTURES_INDEX } from "./_fixturesIndex.js";
 import { TEAMS_CATALOG, teamName } from "./_teamsCatalog.js";
@@ -21,42 +26,48 @@ import { groupStageCompleteFrom } from "./_oddsEngine.js";
 
 const GROUP_LETTERS = [...new Set(Object.values(TEAMS_CATALOG).map(t => t.group))].sort();
 
-// ── Round-of-32 arrangement ──────────────────────────────────────────────────
-// EDIT THIS to match the official R32 draw. Tokens:
-//   "1X" / "2X" = winner / runner-up of group X
-//   "T1".."T8"  = the eight best third-placed teams, T1 = best third
-// The ORDER of this list defines the knockout tree: the winners of R32[0] and
-// R32[1] meet in the first R16 tie, R32[2]/R32[3] in the second, and so on up
-// through the Final. Each of the 32 slot tokens must appear exactly once.
+// ── Official Round of 32 (matches 73–88) ─────────────────────────────────────
+// Internal ids 1..16 map to FIFA matches 73..88 (id = match − 72). Slot tokens:
+//   "1X"/"2X" = winner / runner-up of group X
+//   { t:[...] } = a third-placed team from one of the listed candidate groups
 const R32 = [
-  { home: "1A", away: "T1" },
-  { home: "1B", away: "T2" },
-  { home: "1C", away: "T3" },
-  { home: "1D", away: "T4" },
-  { home: "1E", away: "T5" },
-  { home: "1F", away: "T6" },
-  { home: "1G", away: "T7" },
-  { home: "1H", away: "T8" },
-  { home: "1I", away: "2A" },
-  { home: "1J", away: "2B" },
-  { home: "1K", away: "2C" },
-  { home: "1L", away: "2D" },
-  { home: "2E", away: "2I" },
-  { home: "2F", away: "2J" },
-  { home: "2G", away: "2K" },
-  { home: "2H", away: "2L" },
+  { home: "2A", away: "2B" },                         // 73
+  { home: "1E", away: { t: ["A", "B", "C", "D", "F"] } }, // 74
+  { home: "1F", away: "2C" },                         // 75
+  { home: "1C", away: "2F" },                         // 76
+  { home: "1I", away: { t: ["C", "D", "F", "G", "H"] } }, // 77
+  { home: "2E", away: "2I" },                         // 78
+  { home: "1A", away: { t: ["C", "E", "F", "H", "I"] } }, // 79
+  { home: "1L", away: { t: ["E", "H", "I", "J", "K"] } }, // 80
+  { home: "1D", away: { t: ["B", "E", "F", "I", "J"] } }, // 81
+  { home: "1G", away: { t: ["A", "E", "H", "I", "J"] } }, // 82
+  { home: "2K", away: "2L" },                         // 83
+  { home: "1H", away: "2J" },                         // 84
+  { home: "1B", away: { t: ["E", "F", "G", "I", "J"] } }, // 85
+  { home: "1J", away: "2H" },                         // 86
+  { home: "1K", away: { t: ["D", "E", "I", "J", "L"] } }, // 87
+  { home: "2D", away: "2G" },                         // 88
 ];
 
+// Official feed tree (which two earlier match winners meet). Keys/values are
+// internal ids: R16 17..24 (matches 89..96), QF 25..28, SF 29..30, F 31.
+const FEEDS = {
+  17: [2, 5], 18: [1, 3], 19: [4, 6], 20: [7, 8],   // R16 (89–92)
+  21: [11, 12], 22: [9, 10], 23: [14, 16], 24: [13, 15], // R16 (93–96)
+  25: [17, 18], 26: [21, 22], 27: [19, 20], 28: [23, 24], // QF (97–100)
+  29: [25, 26], 30: [27, 28],                        // SF (101–102)
+  31: [29, 30],                                      // Final (103)
+};
+
 const ROUND_LABEL = {
-  R32: "Round of 32",
-  R16: "Round of 16",
-  QF: "Quarter-final",
-  SF: "Semi-final",
-  F: "Final",
+  R32: "Round of 32", R16: "Round of 16", QF: "Quarter-final",
+  SF: "Semi-final", F: "Final",
 };
 const ROUND_IDX = { R32: 0, R16: 1, QF: 2, SF: 3, F: 4 };
+const roundOfId = (id) => id <= 16 ? "R32" : id <= 24 ? "R16" : id <= 28 ? "QF" : id <= 30 ? "SF" : "F";
 
-// ── group standings (per-group order + ranked best thirds) ───────────────────
+// ── group standings ──────────────────────────────────────────────────────────
+// Per-group order (best→worst) + the eight best third-placed codes (ranked).
 // Mirrors the tiebreak in _oddsEngine.js:groupNonQualifiersFrom — points, goal
 // difference, goals scored, then FIFA rank as a deterministic last resort.
 export function groupStandingsFrom(state) {
@@ -85,25 +96,40 @@ export function groupStandingsFrom(state) {
   return { byGroup, bestThirds: thirds.slice(0, 8).map(t => t.code) };
 }
 
-// ── bracket construction + resolution ────────────────────────────────────────
-
-// Resolve one R32 slot token to a concrete team code, or null if unknown.
-function resolveToken(tok, stand) {
-  let m;
-  if ((m = /^([12])([A-Z])$/.exec(tok))) {
-    const pos = m[1] === "1" ? 0 : 1;
-    return stand.byGroup[m[2]]?.[pos]?.code || null;
-  }
-  if ((m = /^T([1-8])$/.exec(tok))) {
-    return stand.bestThirds[Number(m[1]) - 1] || null;
-  }
-  return null;
+// Assign the qualifying third-placed groups to the eight third slots, each slot
+// taking a group from its candidate set, one group per slot. Reproduces FIFA's
+// allocation table via constrained backtracking (correct whenever the perfect
+// matching is unique). Returns { slotId → group letter } or {} if no match.
+function assignThirds(slots, qualGroups) {
+  const avail = new Set(qualGroups);
+  const out = {};
+  const bt = (i) => {
+    if (i >= slots.length) return true;
+    const { id, cand } = slots[i];
+    for (const g of cand) {
+      if (!avail.has(g)) continue;
+      avail.delete(g); out[id] = g;
+      if (bt(i + 1)) return true;
+      avail.add(g); delete out[id];
+    }
+    return false;
+  };
+  return bt(0) ? out : {};
 }
 
-// Did `code` survive past round `roundIdx`? Alive teams (or teams whose recorded
-// elimination round is *later* than this one) advanced; a team eliminated at
-// exactly this round is the loser. Unknown elimination labels are treated as
-// "not yet decided" so we never over-claim a result.
+// ── bracket construction + resolution ────────────────────────────────────────
+
+function resolveGroupTok(tok, stand) {
+  const m = /^([12])([A-Z])$/.exec(tok);
+  if (!m) return null;
+  const pos = m[1] === "1" ? 0 : 1;
+  return stand.byGroup[m[2]]?.[pos]?.code || null;
+}
+
+// Did `code` survive past round `roundIdx`? Alive teams (or teams eliminated in
+// a *later* round) advanced; a team eliminated at exactly this round is the
+// loser. Unknown elimination labels count as "not yet decided" so we never
+// over-claim a result.
 function reachedBeyond(code, roundIdx, state) {
   const t = state?.teams?.[code];
   if (!t || t.status !== "out") return true;
@@ -114,28 +140,29 @@ function reachedBeyond(code, roundIdx, state) {
 
 // Build the full 31-match bracket for the current state, or null before the
 // group stage is settled. Each match: { id, round, home, away, winner, loser,
-// homeSrc, awaySrc, feedsId }. R32 ids 1..16, R16 17..24, QF 25..28, SF 29..30,
-// F 31. home/away are concrete team codes once resolvable, else null.
+// homeSrc, awaySrc, feedsId }. home/away are concrete team codes once
+// resolvable, else null.
 export function buildBracket(state) {
   if (!groupStageCompleteFrom(state)) return null;
   const stand = groupStandingsFrom(state);
 
+  // Map each qualifying third's group → its (third-placed) team code, then slot
+  // those groups into the eight third slots by their candidate sets.
+  const thirdCodeOfGroup = {};
+  for (const code of stand.bestThirds) thirdCodeOfGroup[TEAMS_CATALOG[code].group] = code;
+  const thirdSlots = [];
+  R32.forEach((m, i) => { if (typeof m.away === "object") thirdSlots.push({ id: i + 1, cand: m.away.t }); });
+  const thirdGroupOfSlot = assignThirds(thirdSlots, Object.keys(thirdCodeOfGroup));
+
   const matches = [];
   R32.forEach((m, i) => matches.push({ id: i + 1, round: "R32", homeTok: m.home, awayTok: m.away }));
-  // Later rounds: each match is fed by two earlier matches, in list order.
-  const addRound = (round, count, startId, srcStart) => {
-    for (let i = 0; i < count; i++) {
-      matches.push({ id: startId + i, round, homeSrc: srcStart + 2 * i, awaySrc: srcStart + 2 * i + 1 });
-    }
-  };
-  addRound("R16", 8, 17, 1);
-  addRound("QF", 4, 25, 17);
-  addRound("SF", 2, 29, 25);
-  addRound("F", 1, 31, 29);
+  for (const id of Object.keys(FEEDS).map(Number)) {
+    matches.push({ id, round: roundOfId(id), homeSrc: FEEDS[id][0], awaySrc: FEEDS[id][1] });
+  }
+  matches.sort((a, b) => a.id - b.id);
 
   const byId = {};
   for (const m of matches) byId[m.id] = m;
-  // Wire feedsId (which match a winner advances into).
   for (const m of matches) {
     if (m.homeSrc) byId[m.homeSrc].feedsId = m.id;
     if (m.awaySrc) byId[m.awaySrc].feedsId = m.id;
@@ -144,8 +171,13 @@ export function buildBracket(state) {
   const winners = {};
   for (const m of matches) {
     if (m.round === "R32") {
-      m.home = resolveToken(m.homeTok, stand);
-      m.away = resolveToken(m.awayTok, stand);
+      m.home = resolveGroupTok(m.homeTok, stand);
+      if (typeof m.awayTok === "object") {
+        const g = thirdGroupOfSlot[m.id];
+        m.away = g ? thirdCodeOfGroup[g] : null;
+      } else {
+        m.away = resolveGroupTok(m.awayTok, stand);
+      }
     } else {
       m.home = winners[m.homeSrc] || null;
       m.away = winners[m.awaySrc] || null;
