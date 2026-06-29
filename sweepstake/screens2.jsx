@@ -6,7 +6,7 @@ const { playerWinProbs, teamWinProbs, woodenSpoonProbs, teamPerformanceTable, fo
         teamsOfPlayer: teamsOf, aliveCount: aliveN,
         teamByCode: tByCode, fmtPct: fp2, TEAMS: ALLT, GROUP_LETTERS: GL,
         CONFED_LABEL: CFL, fixturesOnDay: fxDay, fmtDate: fDate, TOTAL_DAYS: TDAYS,
-        mockScore, isAlive } = window.SS;
+        mockScore, isAlive, knockoutContext, ownerOf } = window.SS;
 
 function signed(n) { return (n >= 0 ? "+" : "") + n; }
 
@@ -820,4 +820,122 @@ function Admin({ state, update, go, token, replaceState }) {
   );
 }
 
-Object.assign(window, { Standings, Teams, Admin });
+/* ========================================================================== */
+/*  KNOCKOUTS — survival roll-call + bracket ties with conditional matchups    */
+/* ========================================================================== */
+function Knockouts({ state, go }) {
+  const kc = knockoutContext(state);
+  const pwp = playerWinProbs(state);
+
+  const Header = () => (
+    <div style={{ marginBottom: 20 }}>
+      <div className="display" style={{ fontSize: "clamp(26px,5.5vw,34px)", textTransform: "uppercase" }}>Knockout Stage</div>
+      <div className="muted" style={{ fontSize: 14 }}>
+        Sudden death — no second chances{kc && kc.nextRound ? ` · next up: ${kc.nextRound}` : ""}.
+      </div>
+    </div>
+  );
+
+  if (!kc) {
+    return (
+      <div className="fadein">
+        <Header />
+        <Empty title="Bracket not set yet">
+          The group stage is still in play — the Round of 32 locks in the moment every group game has a result.
+        </Empty>
+      </div>
+    );
+  }
+
+  // Survival roll-call: most teams remaining first; spotlight the precarious.
+  const ranked = [...state.players].sort((a, b) =>
+    aliveN(state, b.id) - aliveN(state, a.id) || (pwp[b.id] - pwp[a.id]));
+
+  const side = (s, align) => {
+    const t = s ? tByCode(s.code) : null;
+    return (
+      <div className="row" style={{ gap: 10, flex: 1, minWidth: 0,
+        flexDirection: align === "right" ? "row-reverse" : "row", textAlign: align === "right" ? "right" : "left" }}>
+        {t && <div style={{ width: 38, flexShrink: 0 }}><Crest team={t} h={28} fs={13} /></div>}
+        <div style={{ minWidth: 0 }}>
+          <div className="display" style={{ fontSize: 15, textTransform: "uppercase", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+            {s ? s.team : "TBD"}
+          </div>
+          <div className="mono muted" style={{ fontSize: 11 }}>{s && s.owner ? s.owner : "—"}</div>
+        </div>
+      </div>
+    );
+  };
+
+  return (
+    <div className="fadein">
+      <Header />
+
+      <SectLabel>Still standing</SectLabel>
+      <div className="card" style={{ padding: 8, marginBottom: 24 }}>
+        {ranked.map((p, i) => {
+          const mine = teamsOf(state, p.id);
+          const alive = aliveN(state, p.id);
+          const isMe = p.id === state.me;
+          const danger = alive === 1, dead = alive === 0;
+          return (
+            <div key={p.id} className="row" style={{ gap: 12, padding: "10px 8px", alignItems: "center",
+              borderBottom: i < ranked.length - 1 ? "2px dashed rgba(14,27,35,.10)" : "none", opacity: dead ? 0.55 : 1 }}>
+              <Avatar player={p} size={40} />
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div className="display" style={{ fontSize: 17, textTransform: "uppercase" }}>
+                  {p.name}{isMe && <span className="tag">you</span>}
+                  {danger && <span className="tag" style={{ background: "var(--red)", color: "#fff" }}>last team</span>}
+                  {dead && <span className="tag" style={{ background: "var(--ink)", color: "#fff" }}>out</span>}
+                </div>
+                <div className="teamchips" style={{ marginTop: 6 }}>
+                  {mine.map(c => <TeamChip key={c} team={tByCode(c)} dead={!isAlive(state, c)} />)}
+                </div>
+              </div>
+              <div style={{ textAlign: "right" }}>
+                <div className="display" style={{ fontSize: 24, color: danger ? "var(--red)" : "var(--ink)" }}>{alive}</div>
+                <div className="mono muted" style={{ fontSize: 11 }}>/{mine.length} left</div>
+              </div>
+            </div>
+          );
+        })}
+      </div>
+
+      <SectLabel>{kc.nextRound} — what's coming</SectLabel>
+      {kc.ties.length === 0
+        ? <Empty title="No ties to show">The next round's matchups will appear once the current results are in.</Empty>
+        : (
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 14 }} className="today-grid">
+            {kc.ties.map(t => (
+              <div key={t.matchId} className="card" style={{ padding: "12px 14px",
+                borderLeft: t.ownerVsOwner ? "4px solid var(--gold)" : "4px solid transparent" }}>
+                <div className="row" style={{ gap: 8, alignItems: "center" }}>
+                  {side(t.home, "left")}
+                  <div className="display muted" style={{ fontSize: 13, flexShrink: 0 }}>v</div>
+                  {side(t.away, "right")}
+                </div>
+                {t.ownerVsOwner &&
+                  <div className="mono" style={{ fontSize: 11, color: "var(--gold)", marginTop: 8, textAlign: "center" }}>
+                    head-to-head — {t.home.owner} vs {t.away.owner}
+                  </div>}
+                {t.couldMeetNext && t.couldMeetNext.length > 0 &&
+                  <div style={{ marginTop: 10, paddingTop: 8, borderTop: "1px dashed rgba(14,27,35,.12)" }}>
+                    <div className="kept" style={{ fontSize: 10, color: "var(--ink-soft)" }}>Winner could meet in the {t.nextRound}</div>
+                    <div className="teamchips" style={{ marginTop: 6 }}>
+                      {t.couldMeetNext.map(c => (
+                        <span key={c.code} className="row" style={{ gap: 5 }}>
+                          <TeamChip team={tByCode(c.code)} />
+                          {c.owner && <span className="mono muted" style={{ fontSize: 10.5 }}>{c.owner}</span>}
+                        </span>
+                      ))}
+                    </div>
+                  </div>}
+              </div>
+            ))}
+          </div>
+        )}
+    </div>
+  );
+}
+
+Object.assign(window, { Standings, Teams, Admin, Knockouts });
