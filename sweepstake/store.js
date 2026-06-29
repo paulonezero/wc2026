@@ -19,7 +19,7 @@
   function defaultState() {
     return {
       v: 2,
-      poolName: "The Office Pool",
+      poolName: "The World Cup Draw",
       pot: 0,
       currency: "€",
       adminPin: "2026",        // host unlock code

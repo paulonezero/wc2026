@@ -44,7 +44,7 @@ const KO_ROUNDS = {
 function defaultState() {
   return {
     v: 2,
-    poolName: process.env.POOL_NAME || "The Office Pool",
+    poolName: process.env.POOL_NAME || "The World Cup Draw",
     pot: 0,
     currency: "€",
     phase: "lobby",

@@ -817,7 +817,8 @@ function Admin({ state, update, go, token, replaceState }) {
                 <div className="kept" style={{ fontSize: 10 }}>Preview</div>
                 <div style={{ marginTop: 6, fontSize: 13, lineHeight: 1.55, color: "var(--ink)" }}>
                   {String(state.snippet.body).split(/\n{2,}/).map((p, i) =>
-                    <p key={i} style={{ margin: i === 0 ? 0 : "8px 0 0" }}>{p}</p>)}
+                    <p key={i} style={{ margin: i === 0 ? 0 : "8px 0 0" }}>
+                      {highlightNames(p, (state.players || []).map(pl => pl.name))}</p>)}
                 </div>
               </div>
             )}

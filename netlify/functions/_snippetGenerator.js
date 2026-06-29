@@ -225,7 +225,7 @@ export async function generateSnippet({ state, nowMs }) {
     }));
 
     const ctx = {
-      poolName: state.poolName || "The Office Pool",
+      poolName: state.poolName || "The World Cup Draw",
       windowStartIso: new Date(windowStartMs).toISOString(),
       windowEndIso: new Date(windowEndMs).toISOString(),
       windowLabel: "08:00 UK yesterday → now",
@@ -259,7 +259,7 @@ export async function generateSnippet({ state, nowMs }) {
       };
     }
     const ctx = {
-      poolName: state.poolName || "The Office Pool",
+      poolName: state.poolName || "The World Cup Draw",
       windowStartIso: new Date(windowStartMs).toISOString(),
       windowEndIso: new Date(windowEndMs).toISOString(),
       windowLabel: "08:00 UK yesterday → now",
@@ -358,7 +358,7 @@ export async function generateSnippet({ state, nowMs }) {
   }
 
   const ctx = {
-    poolName: state.poolName || "The Office Pool",
+    poolName: state.poolName || "The World Cup Draw",
     windowStartIso: new Date(windowStartMs).toISOString(),
     windowEndIso: new Date(windowEndMs).toISOString(),
     windowLabel: "08:00 UK yesterday → now",
@@ -449,7 +449,7 @@ async function finishSnippet({ ctx, nowMs, matchIds, playersMentioned }) {
 
 function buildSystemPrompt(ctx) {
   const lines = [
-    "You are the cheeky in-house pundit for a small office World Cup sweepstake.",
+    "You are the cheeky resident pundit for a group of mates playing a last-team-standing World Cup game — each player owns a handful of teams and is knocked out once their teams are all gone.",
   ];
   if (ctx.stage === "knockout") {
     lines.push(
@@ -498,6 +498,7 @@ function buildSystemPrompt(ctx) {
     "• Pure prose, no bullets, no headings, no emoji. Two short paragraphs is ideal.",
     "• This is a STANDALONE written note (also sent to group chat / email) — NOT a caption sitting next to a table on a page. Never tell the reader to look at, or refer to, 'the table', 'the standings', 'the bracket', 'above', 'below', columns or anything on screen. Talk about the players and teams directly.",
     "• Don't invent facts. Only use what's in the JSON. Team owners are in the JSON; unowned teams have a null owner — don't assign them to anyone.",
+    "• The players are a group of friends, not work colleagues — never frame this as an office pool, a workplace sweepstake, or anything to do with work, the office, or colleagues.",
   );
   return lines.join("\n");
 }

@@ -666,3 +666,24 @@ morning snippet via Admin (`POST /api/generate-snippet`, force) during the knock
 + conditional matchup teasers read well with the real `ANTHROPIC_API_KEY`. Files touched this session:
 `netlify/functions/_bracket.js` (new), `_snippetGenerator.js`, `_ingest.js`, `sweepstake/data.js`,
 `sweepstake/screens2.jsx`, `sweepstake/app.jsx`, `PROGRESS.md`.
+
+## Snippet polish (this session) — bold names + de-office the tone
+Two fixes to the morning snippet:
+1. **Restored bold player names.** The Today page already bolds names via
+   `highlightNames` (screens1.jsx:211/236), but the Admin **Preview** rendered
+   the body plain (screens2.jsx:819). Now it calls the same shared
+   `highlightNames` (global scope across the babel scripts) — names bold in both
+   in-app views. Delivery channels (snippet.txt / SendGrid email) stay plain by
+   design; Teams webhook already wraps the subject in markdown.
+2. **Removed office/pool/sweepstake framing.** Persona in
+   `_snippetGenerator.js:buildSystemPrompt` changed from "cheeky in-house pundit
+   for a small office World Cup sweepstake" → "cheeky resident pundit for a group
+   of mates playing a last-team-standing World Cup game", plus a new hard rule
+   forbidding office/workplace/colleague framing. Default poolName
+   `"The Office Pool"` → `"The World Cup Draw"` everywhere
+   (_snippetGenerator x3, _notify, pool.js, _ingest.js, store.js). Admin can still
+   override via Pool settings / `POOL_NAME` env.
+
+Files touched: `sweepstake/screens2.jsx`, `netlify/functions/_snippetGenerator.js`,
+`netlify/functions/_notify.js`, `netlify/functions/pool.js`,
+`netlify/functions/_ingest.js`, `sweepstake/store.js`.

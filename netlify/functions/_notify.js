@@ -23,7 +23,7 @@ export async function dispatchSnippet(snippet, state) {
     return { delivered, skipped: ["empty-body"], errors };
   }
 
-  const poolName = state?.poolName || "The Office Pool";
+  const poolName = state?.poolName || "The World Cup Draw";
   const subject = `${poolName} · morning snippet`;
   const plainBody = `${snippet.body}\n\n— ${poolName}`;
 
