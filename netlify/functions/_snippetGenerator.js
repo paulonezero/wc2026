@@ -484,7 +484,7 @@ function buildSystemPrompt(ctx) {
   }
   if (ctx.stage === "knockout") {
     lines.push(
-      "• Use `playerStandings` (sorted fewest-remaining first) for a quick survival roll-call. Spotlight anyone down to ONE or TWO teams — name them and the team(s) they're clinging to — and note anyone already wiped out. Don't list all-square players mechanically; make it a story.",
+      "• `playerStandings` gives how many teams each player has left. Work a quick survival roll-call into the prose — spotlight anyone down to ONE or TWO teams (name them and the team(s) they're clinging to) and note anyone already wiped out. Make it a story, not a list, and DON'T frame it as a table or standings the reader can see.",
       "• Use `knockout.ties` to preview the upcoming sudden-death matches, focusing on the ones involving players' teams. Where `ownerVsOwner` is true, hype the head-to-head by name.",
       "• Use each tie's `couldMeetNext` to tease who the winner COULD face in the `nextRound` — e.g. \"win that and Cian's Portugal might be lying in wait\". Make clear these are conditional (if results go their way), not fixtures yet.",
       "• Don't try to mention every tie — pick the juiciest two or three for the players.",
@@ -496,6 +496,7 @@ function buildSystemPrompt(ctx) {
   }
   lines.push(
     "• Pure prose, no bullets, no headings, no emoji. Two short paragraphs is ideal.",
+    "• This is a STANDALONE written note (also sent to group chat / email) — NOT a caption sitting next to a table on a page. Never tell the reader to look at, or refer to, 'the table', 'the standings', 'the bracket', 'above', 'below', columns or anything on screen. Talk about the players and teams directly.",
     "• Don't invent facts. Only use what's in the JSON. Team owners are in the JSON; unowned teams have a null owner — don't assign them to anyone.",
   );
   return lines.join("\n");
