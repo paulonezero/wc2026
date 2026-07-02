@@ -152,10 +152,10 @@ function Standings({ state, go }) {
           <div className="mono muted" style={{ fontSize: 11.5, padding: "12px 14px 6px", lineHeight: 1.55, borderTop: "1px dashed rgba(26,22,17,.18)", marginTop: 4 }}>
             <div style={{ fontWeight: 700, color: "var(--ink)", marginBottom: 4 }}>How this is calculated</div>
             <div>
-              Each team's <em>strength</em> = FIFA points + recent form (form shifts up to +20 for a heavy win, down to −19 for a heavy loss, +2 for a draw). We convert strengths to win odds with a softmax: every team gets <code>exp(strength ÷ 95)</code> tickets, and your % is your tickets ÷ the total across all teams still alive. Knocked-out teams drop to 0% and their share spreads across the rest.
+              Each team's <em>strength</em> = FIFA points + recent form (form shifts up to +20 for a heavy win, down to −19 for a heavy loss, +2 for a draw). Now that the knockout bracket is set, a team's % is its chance of winning the <em>Final</em>, found by walking the bracket tie by tie: for each round we work out who the team is likely to face (every possible opponent, weighted by their own chance of getting there) and the chance of beating them — the bigger the strength gap, the more one-sided the tie. So a team staring down a brutal side of the draw scores lower than an equally strong team with a kind run. Knocked-out teams read exactly 0% and their share flows to whoever is left. (Before the bracket existed this was a simple strength share across all alive teams.)
             </div>
             <div style={{ marginTop: 6 }}>
-              <span style={{ fontWeight: 700, color: "var(--ink)" }}>Example.</span> Spain on FIFA 1874 with form +12 has strength 1886 → <code>exp(1886/95) ≈ 4.4×10⁸</code> tickets. Argentina on FIFA 1876, form +0, has strength 1876 → <code>exp(1876/95) ≈ 4.0×10⁸</code>. So Spain edges ahead of Argentina even though Argentina starts higher — the form bump compounds exponentially.
+              <span style={{ fontWeight: 700, color: "var(--ink)" }}>Example.</span> Suppose Spain and Argentina are equally strong, but Spain's quarter-final is likely to be France while Argentina's is likely to be a mid-ranked side. Spain's route to the trophy has to go <em>through</em> France, so its % is lower — even though the two teams would be even money head-to-head.
             </div>
           </div>
         </div>}

@@ -19,6 +19,10 @@
 // correct whenever the matching is unique — see assignThirds). Nothing here
 // needs the football-data API: qualification is derivable from the scores the
 // app already holds (same philosophy as data.js:groupNonQualifiers).
+//
+// SYNC NOTE: sweepstake/data.js mirrors this module (KO_R32/KO_FEEDS, bracket
+// construction, championProbs) for the client's path-aware win odds — edit
+// both together.
 
 import { FIXTURES_INDEX } from "./_fixturesIndex.js";
 import { TEAMS_CATALOG, teamName } from "./_teamsCatalog.js";
@@ -195,6 +199,66 @@ export function buildBracket(state) {
   }
 
   return { matches, byId };
+}
+
+// ── path-aware champion odds ─────────────────────────────────────────────────
+// Walk the bracket computing, for every match, the probability distribution of
+// who wins it. A team's title chance is its probability of winning the final —
+// which bakes in the difficulty of its specific route: reaching each round
+// against the realistic distribution of opponents on its side of the draw.
+//
+// Pairwise model: P(A beats B) = 1 / (1 + exp((Rb − Ra) / SCALE)) with
+// R = fifa + form — the Bradley–Terry form of the same exp(R/SCALE) softmax the
+// pre-knockout odds use, so a two-team field gives identical numbers.
+
+const SCALE = 95; // mirrors sweepstake/data.js:SCALE
+
+// { code → probability(0..1) } of winning the tournament, or null before the
+// bracket exists (group stage incomplete). Decided matches count as certain;
+// undecided ties mix over each side's possible occupants. Sums to 1.
+export function championProbsFrom(state, form) {
+  const bracket = buildBracket(state);
+  if (!bracket) return null;
+  const rating = (c) => TEAMS_CATALOG[c].fifa + (form?.[c] || 0);
+  const pBeat = (a, b) => 1 / (1 + Math.exp((rating(b) - rating(a)) / SCALE));
+
+  const win = {}; // match id → { code → P(code wins this match) }
+  for (const m of bracket.matches) {
+    const homeDist = m.home ? { [m.home]: 1 } : (win[m.homeSrc] || {});
+    const awayDist = m.away ? { [m.away]: 1 } : (win[m.awaySrc] || {});
+    const w = {};
+    if (m.winner) {
+      w[m.winner] = 1;
+    } else {
+      for (const [h, ph] of Object.entries(homeDist)) {
+        for (const [a, pa] of Object.entries(awayDist)) {
+          const meet = ph * pa;
+          w[h] = (w[h] || 0) + meet * pBeat(h, a);
+          w[a] = (w[a] || 0) + meet * pBeat(a, h);
+        }
+      }
+    }
+    win[m.id] = w;
+  }
+
+  const out = {};
+  for (const code of Object.keys(TEAMS_CATALOG)) out[code] = 0;
+  for (const [code, p] of Object.entries(win[31] || {})) out[code] = p;
+
+  // Safety net: a team the host marked out without an elimination round isn't
+  // collapsed by the bracket walk — zero it and renormalise so eliminated
+  // always reads exactly 0%.
+  let sum = 0, dropped = 0;
+  for (const code of Object.keys(out)) {
+    if (out[code] > 0 && (state?.teams?.[code]?.status || "alive") !== "alive") {
+      dropped += out[code]; out[code] = 0;
+    }
+    sum += out[code];
+  }
+  if (dropped > 0 && sum > 0) {
+    for (const code of Object.keys(out)) out[code] /= sum;
+  }
+  return out;
 }
 
 // ── snippet-facing context ───────────────────────────────────────────────────

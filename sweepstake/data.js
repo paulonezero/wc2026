@@ -320,9 +320,14 @@
     return !groupNonQualifiers(state).has(code);
   }
 
-  // { code: probability(0..1) } across alive teams
+  // { code: probability(0..1) } across alive teams. Once the knockout bracket
+  // exists this is a path-aware bracket walk (see championProbs below) — a
+  // team's % reflects who it would actually have to beat, round by round, to
+  // lift the trophy. Before that it's a strength softmax over alive teams.
   function teamWinProbs(state) {
     const form = formMap(state);
+    const champ = championProbs(state, form);
+    if (champ) return champ;
     const alive = TEAMS.filter(t => isAlive(state, t.code));
     const exps = alive.map(t => Math.exp((t.fifa + form[t.code]) / SCALE));
     const sum = exps.reduce((a, b) => a + b, 0) || 1;
@@ -355,8 +360,9 @@
      The knockout bracket's matchups + kickoff times come from the live feed
      (football-data), stored on state.koMatches by _ingest.js keyed by the feed
      match id. We surface them here as a date-sorted fixture list for the Today
-     screen. The morning snippet does its own bracket reasoning server-side in
-     netlify/functions/_bracket.js (not mirrored here). */
+     screen. The bracket *structure* (who meets whom, round by round) is
+     mirrored from netlify/functions/_bracket.js below for the path-aware win
+     odds. */
 
   const KO_ROUND_LABEL = { R32: "Round of 32", R16: "Round of 16", QF: "Quarter-final", SF: "Semi-final", F: "Final", "3rd": "Third-place play-off" };
   function koRoundLabel(round) { return KO_ROUND_LABEL[round] || round; }
@@ -373,6 +379,205 @@
         status: r.status || null, finished: typeof r.hs === "number",
         hs: r.hs, as: r.as, pens: r.pens || null, winner: r.winner || null, loser: r.loser || null };
     }).filter(r => r.utcMs != null).sort((a, b) => a.utcMs - b.utcMs);
+  }
+
+  /* ---- knockout bracket + path-aware champion odds -----------------------
+     Mirror of netlify/functions/_bracket.js (KO_R32 slot map, KO_FEEDS tree,
+     standings resolution, third-slot matching, bracket walk). The two files
+     MUST stay identical — edit both together if FIFA revise anything. */
+
+  // Official Round of 32 (FIFA matches 73–88; internal id = match − 72).
+  // "1X"/"2X" = winner / runner-up of group X; { t:[...] } = a third-placed
+  // team from one of the listed candidate groups.
+  const KO_R32 = [
+    { home: "2A", away: "2B" },                             // 73
+    { home: "1E", away: { t: ["A", "B", "C", "D", "F"] } }, // 74
+    { home: "1F", away: "2C" },                             // 75
+    { home: "1C", away: "2F" },                             // 76
+    { home: "1I", away: { t: ["C", "D", "F", "G", "H"] } }, // 77
+    { home: "2E", away: "2I" },                             // 78
+    { home: "1A", away: { t: ["C", "E", "F", "H", "I"] } }, // 79
+    { home: "1L", away: { t: ["E", "H", "I", "J", "K"] } }, // 80
+    { home: "1D", away: { t: ["B", "E", "F", "I", "J"] } }, // 81
+    { home: "1G", away: { t: ["A", "E", "H", "I", "J"] } }, // 82
+    { home: "2K", away: "2L" },                             // 83
+    { home: "1H", away: "2J" },                             // 84
+    { home: "1B", away: { t: ["E", "F", "G", "I", "J"] } }, // 85
+    { home: "1J", away: "2H" },                             // 86
+    { home: "1K", away: { t: ["D", "E", "I", "J", "L"] } }, // 87
+    { home: "2D", away: "2G" },                             // 88
+  ];
+  // Official feed tree: R16 17..24, QF 25..28, SF 29..30, F 31.
+  const KO_FEEDS = {
+    17: [2, 5], 18: [1, 3], 19: [4, 6], 20: [7, 8],
+    21: [11, 12], 22: [9, 10], 23: [14, 16], 24: [13, 15],
+    25: [17, 18], 26: [21, 22], 27: [19, 20], 28: [23, 24],
+    29: [25, 26], 30: [27, 28],
+    31: [29, 30],
+  };
+  const KO_ROUND_IDX = { R32: 0, R16: 1, QF: 2, SF: 3, F: 4 };
+  const koRoundOfId = (id) => id <= 16 ? "R32" : id <= 24 ? "R16" : id <= 28 ? "QF" : id <= 30 ? "SF" : "F";
+
+  // Per-group order (best→worst) + the eight best third-placed codes. Same
+  // tiebreak as groupNonQualifiers: pts, GD, GF, FIFA rank.
+  function koGroupStandings(state) {
+    const scores = state.scores || {};
+    const rec = {};
+    TEAMS.forEach(t => { rec[t.code] = { code: t.code, group: t.group, fifa: t.fifa, pts: 0, gd: 0, gf: 0 }; });
+    FIXTURES.forEach(fx => {
+      if (fx.round && fx.round !== "group") return;
+      const sc = scores[fx.id]; if (!sc) return;
+      const H = rec[fx.home], A = rec[fx.away]; if (!H || !A) return;
+      H.gf += sc.hs; H.gd += sc.hs - sc.as; A.gf += sc.as; A.gd += sc.as - sc.hs;
+      if (sc.hs > sc.as) H.pts += 3; else if (sc.hs < sc.as) A.pts += 3; else { H.pts += 1; A.pts += 1; }
+    });
+    const better = (a, b) => b.pts - a.pts || b.gd - a.gd || b.gf - a.gf || b.fifa - a.fifa;
+    const byGroup = {}, thirds = [];
+    GROUP_LETTERS.forEach(g => {
+      byGroup[g] = TEAMS.filter(t => t.group === g).map(t => rec[t.code]).sort(better);
+      if (byGroup[g][2]) thirds.push(byGroup[g][2]);
+    });
+    thirds.sort(better);
+    return { byGroup, bestThirds: thirds.slice(0, 8).map(t => t.code) };
+  }
+
+  // Slot the qualifying third-placed groups into the eight third slots by
+  // candidate set (constrained backtracking; unique matching = FIFA's table).
+  function assignThirds(slots, qualGroups) {
+    const avail = new Set(qualGroups);
+    const out = {};
+    const bt = (i) => {
+      if (i >= slots.length) return true;
+      const { id, cand } = slots[i];
+      for (const g of cand) {
+        if (!avail.has(g)) continue;
+        avail.delete(g); out[id] = g;
+        if (bt(i + 1)) return true;
+        avail.add(g); delete out[id];
+      }
+      return false;
+    };
+    return bt(0) ? out : {};
+  }
+
+  // Did `code` survive past round `roundIdx`? Unknown elimination labels count
+  // as "not yet decided" so the bracket never over-claims a result.
+  function koReachedBeyond(code, roundIdx, state) {
+    const t = state.teams?.[code];
+    if (!t || t.status !== "out") return true;
+    const er = KO_ROUND_IDX[t.eliminatedRound];
+    if (er == null) return true;
+    return er > roundIdx;
+  }
+
+  // Full 31-match bracket, or null before the group stage is settled. Each
+  // match: { id, round, home, away, winner, loser, homeSrc, awaySrc, feedsId }.
+  function buildBracket(state) {
+    if (!groupStageComplete(state)) return null;
+    const stand = koGroupStandings(state);
+
+    const thirdCodeOfGroup = {};
+    stand.bestThirds.forEach(code => { thirdCodeOfGroup[teamByCode(code).group] = code; });
+    const thirdSlots = [];
+    KO_R32.forEach((m, i) => { if (typeof m.away === "object") thirdSlots.push({ id: i + 1, cand: m.away.t }); });
+    const thirdGroupOfSlot = assignThirds(thirdSlots, Object.keys(thirdCodeOfGroup));
+
+    const resolveGroupTok = (tok) => {
+      const m = /^([12])([A-Z])$/.exec(tok);
+      if (!m) return null;
+      return stand.byGroup[m[2]]?.[m[1] === "1" ? 0 : 1]?.code || null;
+    };
+
+    const matches = [];
+    KO_R32.forEach((m, i) => matches.push({ id: i + 1, round: "R32", homeTok: m.home, awayTok: m.away }));
+    Object.keys(KO_FEEDS).map(Number).forEach(id => {
+      matches.push({ id, round: koRoundOfId(id), homeSrc: KO_FEEDS[id][0], awaySrc: KO_FEEDS[id][1] });
+    });
+    matches.sort((a, b) => a.id - b.id);
+
+    const byId = {};
+    matches.forEach(m => { byId[m.id] = m; });
+    matches.forEach(m => {
+      if (m.homeSrc) byId[m.homeSrc].feedsId = m.id;
+      if (m.awaySrc) byId[m.awaySrc].feedsId = m.id;
+    });
+
+    const winners = {};
+    matches.forEach(m => {
+      if (m.round === "R32") {
+        m.home = resolveGroupTok(m.homeTok);
+        if (typeof m.awayTok === "object") {
+          const g = thirdGroupOfSlot[m.id];
+          m.away = g ? thirdCodeOfGroup[g] : null;
+        } else {
+          m.away = resolveGroupTok(m.awayTok);
+        }
+      } else {
+        m.home = winners[m.homeSrc] || null;
+        m.away = winners[m.awaySrc] || null;
+      }
+      let winner = null, loser = null;
+      if (m.home && m.away) {
+        const ridx = KO_ROUND_IDX[m.round];
+        const hb = koReachedBeyond(m.home, ridx, state);
+        const ab = koReachedBeyond(m.away, ridx, state);
+        if (hb && !ab) { winner = m.home; loser = m.away; }
+        else if (ab && !hb) { winner = m.away; loser = m.home; }
+      }
+      m.winner = winner; m.loser = loser;
+      winners[m.id] = winner;
+    });
+
+    return { matches, byId };
+  }
+
+  // { code → probability(0..1) } of winning the tournament, or null before the
+  // bracket exists. Walks the bracket: each match's win distribution mixes
+  // over the possible occupants of each side; decided matches are certain.
+  // Pairwise model P(A beats B) = 1/(1+exp((Rb−Ra)/SCALE)), R = fifa + form —
+  // the two-team case of the same softmax the group-stage odds use. A team's
+  // title chance therefore reflects the difficulty of its actual route.
+  function championProbs(state, form) {
+    const bracket = buildBracket(state);
+    if (!bracket) return null;
+    const rating = (c) => teamByCode(c).fifa + (form?.[c] || 0);
+    const pBeat = (a, b) => 1 / (1 + Math.exp((rating(b) - rating(a)) / SCALE));
+
+    const win = {}; // match id → { code → P(code wins this match) }
+    bracket.matches.forEach(m => {
+      const homeDist = m.home ? { [m.home]: 1 } : (win[m.homeSrc] || {});
+      const awayDist = m.away ? { [m.away]: 1 } : (win[m.awaySrc] || {});
+      const w = {};
+      if (m.winner) {
+        w[m.winner] = 1;
+      } else {
+        Object.keys(homeDist).forEach(h => {
+          Object.keys(awayDist).forEach(a => {
+            const meet = homeDist[h] * awayDist[a];
+            w[h] = (w[h] || 0) + meet * pBeat(h, a);
+            w[a] = (w[a] || 0) + meet * pBeat(a, h);
+          });
+        });
+      }
+      win[m.id] = w;
+    });
+
+    const out = {};
+    TEAMS.forEach(t => { out[t.code] = 0; });
+    Object.keys(win[31] || {}).forEach(c => { out[c] = win[31][c]; });
+
+    // Safety net: a team the host marked out without an elimination round
+    // isn't collapsed by the bracket walk — zero it and renormalise so
+    // eliminated always reads exactly 0%.
+    let sum = 0, dropped = 0;
+    Object.keys(out).forEach(c => {
+      if (out[c] > 0 && (state.teams?.[c]?.status || "alive") !== "alive") {
+        dropped += out[c]; out[c] = 0;
+      }
+      sum += out[c];
+    });
+    if (dropped > 0 && sum > 0) Object.keys(out).forEach(c => { out[c] /= sum; });
+    return out;
   }
 
   /* ---- wooden spoon: projected group-table ranking ---------------------
@@ -739,7 +944,7 @@
     formMap, formDelta, isAlive, teamWinProbs, playerWinProbs,
     woodenSpoonProbs, playerSpoonProbs, teamPerformanceTable,
     groupStageComplete, woodenSpoonResult, groupNonQualifiers,
-    koFixtures, koRoundLabel,
+    koFixtures, koRoundLabel, buildBracket, championProbs,
     teamsOfPlayer, ownerOf, aliveCount, teamByCode, fmtPct, splitCounts, flagURL, textOn,
     tierLabel, tierSubtitle,
     hasGoalData, allGoals, topScorers, goalTimingBuckets,

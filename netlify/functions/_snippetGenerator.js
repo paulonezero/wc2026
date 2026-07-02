@@ -15,7 +15,7 @@ import {
 } from "./_fixturesIndex.js";
 import { TEAMS_CATALOG, teamName } from "./_teamsCatalog.js";
 import { groupNonQualifiersFrom } from "./_oddsEngine.js";
-import { knockoutContext } from "./_bracket.js";
+import { knockoutContext, championProbsFrom } from "./_bracket.js";
 
 const ANTHROPIC_URL = "https://api.anthropic.com/v1/messages";
 const MODEL = "claude-sonnet-4-6";
@@ -91,7 +91,13 @@ export function isAlive(state, code) {
 }
 
 // { code → probability(0..1) } across alive teams, using the given form map.
+// Once the knockout bracket exists this is a path-aware bracket walk (see
+// _bracket.js:championProbsFrom) — a team's % reflects who it would actually
+// have to beat, round by round, to lift the trophy. Before that (group stage
+// still running) it's a strength softmax across all alive teams.
 export function teamWinProbsFrom(state, form) {
+  const champ = championProbsFrom(state, form);
+  if (champ) return champ;
   const alive = Object.keys(TEAMS_CATALOG).filter(c => isAlive(state, c));
   const exps = alive.map(c => Math.exp((TEAMS_CATALOG[c].fifa + form[c]) / SCALE));
   const sum = exps.reduce((a, b) => a + b, 0) || 1;

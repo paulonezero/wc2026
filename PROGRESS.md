@@ -4,6 +4,53 @@
 Ship the v1 sweepstake app in time for draw day on **2026-06-11**. The app is already deployed; ongoing work is incremental polish.
 
 ## Most recent change
+**Win odds are now path-aware: a bracket walk replaces the flat softmax once the knockout bracket exists.**
+
+### Why
+User asked for the win % to account for the difficulty of each team's route to the final. The old
+model (softmax over FIFA+form across all alive teams) ignored draw position — a team behind France
+and Argentina scored the same as an equal-rated team in a soft half.
+
+### How
+- `netlify/functions/_bracket.js`: new `championProbsFrom(state, form)` — dynamic-programming walk
+  over the existing `buildBracket` 31-match tree. Per match, each side carries a probability
+  distribution of possible occupants; `P(A beats B) = 1/(1+exp((Rb−Ra)/SCALE))` with `R = fifa+form`
+  and `SCALE = 95` (the Bradley–Terry pairwise form of the same softmax, so a two-team field gives
+  identical numbers). Decided matches (winner known via `reachedBeyond`) collapse to certainty; a
+  team's title chance = its probability of winning match 31 (the Final). Safety net: a team marked
+  `status:"out"` with no `eliminatedRound` (admin toggle) is zeroed and the rest renormalised.
+  Returns null pre-knockout (group stage incomplete). Sums to exactly 1.
+- `_snippetGenerator.js:teamWinProbsFrom` now tries `championProbsFrom` first, falls back to the old
+  softmax while the group stage runs. All server consumers (/api/top3, /api/top3.txt, snippet
+  before/after deltas) inherit it with no caller changes.
+- `sweepstake/data.js`: re-added a browser mirror of `_bracket.js` (`KO_R32`/`KO_FEEDS`,
+  `koGroupStandings`, `assignThirds`, `koReachedBeyond`, `buildBracket`) + `championProbs`.
+  `teamWinProbs` routes through it the same way. `buildBracket`/`championProbs` exported on
+  `window.SS`. SYNC NOTE added in both files — edit together.
+- `screens2.jsx`: rewrote the team-win-odds "How this is calculated" footer + example to explain the
+  bracket walk (route difficulty), keeping the FIFA+form strength explanation.
+
+### Verified
+- `node --check` clean on `_bracket.js`/`_snippetGenerator.js`/`data.js`; esbuild clean on `screens2.jsx`.
+- 13-check node harness (scratchpad `parity.mjs`): synthetic fully-scored groups → bracket resolves
+  32/32 slots; client `SS.teamWinProbs` ≡ server `teamWinProbsFrom` to 1e-12 (also after R32 KOs and
+  at QF stage); sums exactly 1 with 16 non-qualifiers at 0; player rollup sums to 1; admin-out
+  renormalise path works. Path-awareness demonstrated: weak-half England 11.9% (flat) → 25.8%
+  (bracket); Portugal (behind FRA/ARG/BRA) 7.3% → 2.0%; knocking out FRA in R32 redistributes
+  24.1pp to its own half vs 4.0pp to the other.
+
+### Limitations / follow-ups
+- Not run against the live production blob (site URL not recorded in the repo) — after deploy,
+  eyeball Standings odds vs the real bracket, esp. the 8 winner-vs-third R32 pairings (the known
+  `assignThirds` ambiguity now affects odds, not just snippet copy).
+- Form still accrues from group fixtures only (`state.scores`); KO results (`state.koMatches`) don't
+  move ratings. Possible follow-up: fold finished koMatches into `formMap` (3 mirrors to touch).
+- Snippet before/after deltas still share one `state` (eliminations identical on both sides), so KO
+  overnight swings show only via form — same as before this change.
+
+---
+
+## Previous change
 **Today page reworked for the knockouts; Knockouts tab removed; real KO schedule from the feed.**
 
 ### Why
@@ -45,7 +92,7 @@ main page to drop the results panel, show **today's fixtures then upcoming fixtu
 
 ---
 
-## Previous change
+## Earlier change (snippet)
 **Morning snippet pivots to the knockout stage — survival roll-call + conditional matchup teasers.**
 
 ### Why
