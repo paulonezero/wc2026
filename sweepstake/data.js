@@ -779,23 +779,79 @@
 
   /* ---- tournament stats (Stats screen) ---------------------------------- */
 
+  // Finished group + knockout matches in one shape for Stats. Group fixtures
+  // come from state.scores; knockouts live in state.koMatches once the feed has
+  // them. Each row keeps an `fx` object so existing result rows can render both.
+  function allFinishedMatches(state) {
+    const out = [];
+    const scores = state.scores || {};
+    FIXTURES.forEach(fx => {
+      const sc = scores[fx.id];
+      if (!sc) return;
+      const hs = +sc.hs, as = +sc.as;
+      out.push({
+        id: fx.id, source: "group", fx, home: fx.home, away: fx.away, hs, as,
+        round: "group", roundLabel: "Group " + fx.group, dateLabel: fmtDate(fx.day),
+        sortMs: dateForDay(fx.day).getTime() + koSortKey(fx.ko) * 60000,
+        winner: hs > as ? fx.home : as > hs ? fx.away : null,
+        loser: hs > as ? fx.away : as > hs ? fx.home : null,
+        total: hs + as, margin: Math.abs(hs - as),
+      });
+    });
+    Object.keys(state.koMatches || {}).forEach(id => {
+      const r = state.koMatches[id];
+      if (!r || typeof r.hs !== "number" || typeof r.as !== "number" || !r.home || !r.away) return;
+      const hs = +r.hs, as = +r.as;
+      const fx = { id, home: r.home, away: r.away, round: r.round, utcDate: r.utcDate || null };
+      out.push({
+        id, source: "ko", fx, home: r.home, away: r.away, hs, as,
+        round: r.round, roundLabel: koRoundLabel(r.round), dateLabel: r.utcDate
+          ? new Date(r.utcDate).toLocaleDateString("en-GB", { timeZone: "Europe/London", weekday: "short", day: "numeric", month: "short" })
+          : koRoundLabel(r.round),
+        sortMs: r.utcDate ? Date.parse(r.utcDate) : Number.MAX_SAFE_INTEGER,
+        winner: r.winner || (hs > as ? r.home : as > hs ? r.away : null),
+        loser: r.loser || (hs > as ? r.away : as > hs ? r.home : null),
+        pens: r.pens || null,
+        total: hs + as, margin: Math.abs(hs - as),
+      });
+    });
+    return out.sort((a, b) => a.sortMs - b.sortMs || String(a.id).localeCompare(String(b.id)));
+  }
+
+  // Per-team actual totals across every finished match in the tournament.
+  function allMatchTeamTable(state) {
+    const rec = {};
+    TEAMS.forEach(t => { rec[t.code] = { code: t.code, group: t.group, fifa: t.fifa, played: 0, gf: 0, ga: 0, gd: 0 }; });
+    allFinishedMatches(state).forEach(m => {
+      const H = rec[m.home], A = rec[m.away];
+      if (!H || !A) return;
+      H.played++; A.played++;
+      H.gf += m.hs; H.ga += m.as;
+      A.gf += m.as; A.ga += m.hs;
+    });
+    Object.values(rec).forEach(r => { r.gd = r.gf - r.ga; });
+    return Object.values(rec);
+  }
+
   // True once any fixture carries goal-event detail. Goal data is tier-dependent
-  // on football-data.org, so the Stats screen gates the scorer/timing sections
-  // on this and shows score-only stats regardless.
+  // on football-data.org/ESPN, so the Stats screen gates the scorer/timing
+  // sections on this and shows score-only stats regardless.
   function hasGoalData(state) {
     const g = state.goals || {};
     return Object.keys(g).some(k => Array.isArray(g[k]) && g[k].length);
   }
 
-  // Flatten state.goals into one list, joining each goal to its fixture's day.
-  // Sorted by day then minute. Returns [] when no goal data exists.
+  // Flatten state.goals into one list, joining each goal to its match metadata.
+  // Group goals are keyed by fixture id; knockout goals are keyed by koMatches id.
+  // Sorted by match order then minute. Returns [] when no goal data exists.
   function allGoals(state) {
     const g = state.goals || {};
-    const dayOf = {}; FIXTURES.forEach(fx => { dayOf[fx.id] = fx.day; });
+    const byId = {}; allFinishedMatches(state).forEach(m => { byId[m.id] = m; });
     const out = [];
     Object.keys(g).forEach(fxId => {
+      const m = byId[fxId];
       (g[fxId] || []).forEach(ev => {
-        out.push({ fixtureId: fxId, day: dayOf[fxId] ?? 99,
+        out.push({ fixtureId: fxId, day: m?.sortMs ?? Number.MAX_SAFE_INTEGER,
           team: ev.team, scorer: ev.scorer, min: ev.min, injury: ev.injury, type: ev.type });
       });
     });
@@ -842,18 +898,17 @@
     return bands.map(b => ({ label: b.label, count: b.count }));
   }
 
-  // Best attacks: team rows sorted by goals scored desc. Reuses the per-team
-  // record already built by teamPerformanceTable.
+  // Best attacks: team rows sorted by goals scored across all finished matches.
   function teamScoringTable(state, limit = 10) {
-    return teamPerformanceTable(state)
+    return allMatchTeamTable(state)
       .filter(r => r.played > 0)
       .sort((a, b) => b.gf - a.gf || b.gd - a.gd || a.ga - b.ga)
       .slice(0, limit);
   }
 
-  // Best defences: team rows sorted by goals conceded asc (must have played).
+  // Best defences: team rows sorted by goals conceded across all finished matches.
   function teamDefensiveTable(state, limit = 10) {
-    return teamPerformanceTable(state)
+    return allMatchTeamTable(state)
       .filter(r => r.played > 0)
       .sort((a, b) => a.ga - b.ga || b.gd - a.gd || b.gf - a.gf)
       .slice(0, limit);
@@ -861,10 +916,8 @@
 
   // Scored fixtures with the largest winning margin → [{ fx, hs, as, margin }].
   function biggestWins(state, limit = 5) {
-    const scores = state.scores || {};
-    return FIXTURES
-      .filter(fx => (!fx.round || fx.round === "group") && scores[fx.id])
-      .map(fx => { const s = scores[fx.id]; return { fx, hs: s.hs, as: s.as, margin: Math.abs(s.hs - s.as) }; })
+    return allFinishedMatches(state)
+      .map(m => ({ ...m, fx: m.fx, hs: m.hs, as: m.as, margin: m.margin }))
       .filter(r => r.margin > 0)
       .sort((a, b) => b.margin - a.margin || (b.hs + b.as) - (a.hs + a.as))
       .slice(0, limit);
@@ -872,10 +925,8 @@
 
   // Scored fixtures with the most goals → [{ fx, hs, as, total }].
   function highestScoringMatches(state, limit = 5) {
-    const scores = state.scores || {};
-    return FIXTURES
-      .filter(fx => (!fx.round || fx.round === "group") && scores[fx.id])
-      .map(fx => { const s = scores[fx.id]; return { fx, hs: s.hs, as: s.as, total: s.hs + s.as }; })
+    return allFinishedMatches(state)
+      .map(m => ({ ...m, fx: m.fx, hs: m.hs, as: m.as, total: m.total }))
       .sort((a, b) => b.total - a.total || Math.abs(b.hs - b.as) - Math.abs(a.hs - a.as))
       .slice(0, limit);
   }
@@ -883,19 +934,10 @@
   // Headliner numbers for the top of the Stats screen. topScorer is present only
   // when goal data exists.
   function tournamentHeadlines(state) {
-    const rows = teamPerformanceTable(state);
-    const matchesPlayed = rows.reduce((a, r) => a + r.played, 0) / 2;
-    const totalGoals = rows.reduce((a, r) => a + r.gf, 0);
-    const cleanSheets = (() => {
-      const scores = state.scores || {};
-      let cs = 0;
-      FIXTURES.forEach(fx => {
-        const s = scores[fx.id]; if (!s) return;
-        if (s.as === 0) cs++;
-        if (s.hs === 0) cs++;
-      });
-      return cs;
-    })();
+    const matches = allFinishedMatches(state);
+    const matchesPlayed = matches.length;
+    const totalGoals = matches.reduce((a, m) => a + m.total, 0);
+    const cleanSheets = matches.reduce((a, m) => a + (m.as === 0 ? 1 : 0) + (m.hs === 0 ? 1 : 0), 0);
     const bw = biggestWins(state, 1)[0] || null;
     const hs = highestScoringMatches(state, 1)[0] || null;
     const ts = hasGoalData(state) ? (topScorers(state, 1)[0] || null) : null;
@@ -913,7 +955,7 @@
   // Sweepstake blend: per-player aggregate over the teams they own.
   // { [playerId]: { goalsFor, goalsAgainst, gd, played, topScorerName? } }.
   function perPlayerStats(state) {
-    const rows = teamPerformanceTable(state);
+    const rows = allMatchTeamTable(state);
     const byCode = {}; rows.forEach(r => { byCode[r.code] = r; });
     const scorers = hasGoalData(state) ? topScorers(state, 9999) : [];
     const out = {};
@@ -937,6 +979,69 @@
       .sort((a, b) => b.goalsFor - a.goalsFor || b.gd - a.gd);
   }
 
+  // Owner-vs-owner rivalry table. Only matches where different players owned
+  // the two teams count; same-player internal clashes and unowned teams are out.
+  function playerRivalries(state) {
+    const playersById = {};
+    (state.players || []).forEach(p => { playersById[p.id] = p; });
+    const out = {};
+    allFinishedMatches(state).forEach(m => {
+      const hp = state.draw?.assignments?.[m.home];
+      const ap = state.draw?.assignments?.[m.away];
+      if (!hp || !ap || hp === ap || !playersById[hp] || !playersById[ap]) return;
+      const ids = [hp, ap].sort();
+      const key = ids.join("|");
+      const r = out[key] || (out[key] = {
+        key,
+        players: ids.map(id => playersById[id]),
+        played: 0,
+        wins: { [ids[0]]: 0, [ids[1]]: 0 },
+        draws: 0,
+        goals: { [ids[0]]: 0, [ids[1]]: 0 },
+        matches: [],
+        knockout: false,
+        maxGoals: 0,
+      });
+      r.played++;
+      r.goals[hp] += m.hs; r.goals[ap] += m.as;
+      r.maxGoals = Math.max(r.maxGoals, m.total);
+      if (m.source === "ko") r.knockout = true;
+      let winnerId = null;
+      if (m.winner === m.home) winnerId = hp;
+      else if (m.winner === m.away) winnerId = ap;
+      if (winnerId) r.wins[winnerId]++;
+      else r.draws++;
+      r.matches.push({ ...m, homeOwner: playersById[hp], awayOwner: playersById[ap], winnerOwnerId: winnerId });
+    });
+    const rows = Object.values(out).map(r => {
+      const a = r.players[0].id, b = r.players[1].id;
+      const decided = r.wins[a] + r.wins[b];
+      const diff = Math.abs(r.wins[a] - r.wins[b]);
+      const badges = [];
+      if (r.played >= 2) badges.push("Rivalry");
+      if (r.played >= 2 && r.wins[a] === r.wins[b]) badges.push("Grudge Match");
+      if (diff >= 2) badges.push("One-sided");
+      if (r.maxGoals >= 5) badges.push("Goal Fest");
+      if (decided > 0 && (r.wins[a] === decided || r.wins[b] === decided)) badges.push("Clean Sweep");
+      if (r.knockout) badges.push("Knockout Blow");
+      const leaderId = r.wins[a] > r.wins[b] ? a : r.wins[b] > r.wins[a] ? b : null;
+      r.badges = badges;
+      r.leaderId = leaderId;
+      r.decided = decided;
+      r.leaderShare = decided ? Math.max(r.wins[a], r.wins[b]) / decided : 0;
+      r.goalTotal = r.goals[a] + r.goals[b];
+      r.matches.sort((x, y) => x.sortMs - y.sortMs);
+      return r;
+    });
+    return rows.sort((a, b) =>
+      b.played - a.played ||
+      Number(b.knockout) - Number(a.knockout) ||
+      b.goalTotal - a.goalTotal ||
+      Math.abs(a.wins[a.players[0].id] - a.wins[a.players[1].id]) - Math.abs(b.wins[b.players[0].id] - b.wins[b.players[1].id]) ||
+      a.players[0].name.localeCompare(b.players[0].name) ||
+      a.players[1].name.localeCompare(b.players[1].name));
+  }
+
   window.SS = {
     TEAMS, GROUP_LETTERS, CONFED_LABEL, SCALE,
     FIXTURES, KICKS, TOURNAMENT_START, TOTAL_DAYS,
@@ -947,8 +1052,8 @@
     koFixtures, koRoundLabel, buildBracket, championProbs,
     teamsOfPlayer, ownerOf, aliveCount, teamByCode, fmtPct, splitCounts, flagURL, textOn,
     tierLabel, tierSubtitle,
-    hasGoalData, allGoals, topScorers, goalTimingBuckets,
+    hasGoalData, allFinishedMatches, allGoals, topScorers, goalTimingBuckets,
     teamScoringTable, teamDefensiveTable, biggestWins, highestScoringMatches,
-    tournamentHeadlines, perPlayerStats, goalOwnershipLeaders,
+    tournamentHeadlines, perPlayerStats, goalOwnershipLeaders, playerRivalries,
   };
 })();

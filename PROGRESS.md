@@ -3,6 +3,48 @@
 ## Current goal
 Ship the v1 sweepstake app in time for draw day on **2026-06-11**. The app is already deployed; ongoing work is incremental polish.
 
+## Completed change — Player rivalries + all-match Stats
+Current goal: implemented a Stats update that includes all finished group + knockout games and adds a player-vs-player rivalry table.
+
+Key decisions / why:
+- Stats should count every finished match available in state, not just `FIXTURES`/`state.scores`, because knockout scores are stored separately in `state.koMatches`.
+- Rivalries are owner-vs-owner only: same-owner clashes and unowned teams are excluded so the table reflects player head-to-heads.
+- Golden Boot/timing should include knockout goals when ESPN can map them, so `_goalsFeed.js` now also considers finished `koMatches`.
+
+Current state of changed files:
+- `sweepstake/data.js`: added an all-finished-match normalization path, moved score-based Stats helpers to group+KO totals, added `playerRivalries`.
+- `sweepstake/screens3.jsx`: added the Player rivalries Stats section with expandable match detail and updated Stats copy.
+- `netlify/functions/_goalsFeed.js`: extended the goal-fetch candidate list to include finished knockout matches keyed by `state.koMatches`.
+- `PROGRESS.md`: updated with this implementation/verification note.
+
+Verified:
+- `node --check sweepstake/data.js`
+- `node --check netlify/functions/_goalsFeed.js`
+- `npx --yes esbuild sweepstake/screens3.jsx --loader:.jsx=jsx --jsx=transform --format=iife --log-level=warning --outfile=/private/tmp/screens3-check.js`
+- Node VM data harness: group + knockout matches counted together; same-owner matches excluded from rivalries; knockout goals included in `topScorers`; rivalry badges include `Rivalry`, `One-sided`, `Goal Fest`, `Clean Sweep`, `Knockout Blow` in the synthetic case.
+- Mocked `_goalsFeed` harness: one group match and one knockout match mapped to ESPN event ids and wrote `state.goals` for both.
+- `git diff --check`
+
+Next step:
+- Browser-smoke the Stats tab in a deployed/local page if visual QA is needed; no tracked files remain unverified by syntax/data checks.
+
+## Preparation note — 2026-07-03
+Current goal: be ready to answer questions about an upcoming change against the actual code in `/Users/paulmcevoy/wc2026`.
+
+Key decisions / source of truth:
+- No implementation yet; this pass was read-only except this progress note.
+- Main architecture is still static React/Babel globals plus Netlify Functions and Blobs (`ARCHITECTURE.md`, `index.html`, `netlify.toml`).
+- Likely change surfaces: app shell/state sync in `sweepstake/app.jsx`, browser normalization/network calls in `sweepstake/net.js`, persisted state defaults/draw helpers in `sweepstake/store.js`, user-facing flows in `sweepstake/screens1.jsx` and `sweepstake/screens2.jsx`, odds/bracket/date helpers in `sweepstake/data.js`, and backend state/API/ingest/snippet code under `netlify/functions/`.
+- Browser/server odds bracket mirrors must stay in sync: `sweepstake/data.js` and `netlify/functions/_bracket.js`.
+
+Current state of changed files:
+- Existing untracked file: `apply-prefilled-draw.mjs`.
+- No tracked code changes from this preparation pass.
+- Verified syntax with `node --check` for `netlify/functions/_bracket.js`, `netlify/functions/_snippetGenerator.js`, and `sweepstake/data.js`.
+
+Next step:
+- When the change request arrives, inspect the exact touched modules from disk first, then implement narrowly and update this file again after each discrete step.
+
 ## Most recent change
 **Win odds are now path-aware: a bracket walk replaces the flat softmax once the knockout bracket exists.**
 

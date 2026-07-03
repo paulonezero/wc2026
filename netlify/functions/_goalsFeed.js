@@ -98,14 +98,31 @@ export async function ingestGoals(state, nowMs = Date.now()) {
 
   const scores = state.scores || {};
 
-  // A fixture needs goals when it has a score (so it finished), that score
+  // A match needs goals when it has a score (so it finished), that score
   // implies at least one goal, we haven't stored them all yet, and we haven't
-  // exhausted our retry budget for it.
-  const needed = FIXTURES_INDEX.filter(fx => {
+  // exhausted our retry budget for it. Group matches use FIXTURES_INDEX;
+  // knockout matches use state.koMatches ids from football-data.
+  const groupNeeded = FIXTURES_INDEX.filter(fx => {
     const sc = scores[fx.id];
     if (!sc) return false;
     const exp = (sc.hs || 0) + (sc.as || 0);
     if (exp <= 0) return false;
+    const have = Array.isArray(state.goals[fx.id]) ? state.goals[fx.id].length : 0;
+    if (have >= exp) return false;
+    return (gf.tries[fx.id] || 0) < MAX_TRIES;
+  }).map(fx => ({ ...fx, source: "group", hs: scores[fx.id].hs, as: scores[fx.id].as }));
+
+  const koNeeded = Object.entries(state.koMatches || {}).filter(([id, m]) => {
+    if (!m || typeof m.hs !== "number" || typeof m.as !== "number" || !m.home || !m.away || !m.utcDate) return false;
+    const exp = (m.hs || 0) + (m.as || 0);
+    if (exp <= 0) return false;
+    const have = Array.isArray(state.goals[String(id)]) ? state.goals[String(id)].length : 0;
+    if (have >= exp) return false;
+    return (gf.tries[String(id)] || 0) < MAX_TRIES;
+  }).map(([id, m]) => ({ id: String(id), source: "ko", date: etDateFromUtc(m.utcDate), home: m.home, away: m.away, hs: m.hs, as: m.as }));
+
+  const needed = [...groupNeeded, ...koNeeded].filter(fx => {
+    const exp = (fx.hs || 0) + (fx.as || 0);
     const have = Array.isArray(state.goals[fx.id]) ? state.goals[fx.id].length : 0;
     if (have >= exp) return false;
     return (gf.tries[fx.id] || 0) < MAX_TRIES;
@@ -132,8 +149,14 @@ export async function ingestGoals(state, nowMs = Date.now()) {
         const home = codeFromName(cs.find(c => c.homeAway === "home")?.team?.displayName);
         const away = codeFromName(cs.find(c => c.homeAway === "away")?.team?.displayName);
         if (!home || !away) continue;
-        const fxId = findFixtureId(etDateFromUtc(e.date), home, away);
+        const eventEtDate = etDateFromUtc(e.date);
+        const fxId = findFixtureId(eventEtDate, home, away);
         if (fxId && e.id != null) gf.fxMap[fxId] = e.id;
+        for (const fx of needed) {
+          if (gf.fxMap[fx.id]) continue;
+          const closeDate = Math.abs(Date.parse(eventEtDate + "T00:00:00Z") - Date.parse(fx.date + "T00:00:00Z")) <= 86400000;
+          if (closeDate && ((fx.home === home && fx.away === away) || (fx.home === away && fx.away === home))) gf.fxMap[fx.id] = e.id;
+        }
       }
     } catch (err) {
       warnings.push(`scoreboard ${date}: ${err.message}`);

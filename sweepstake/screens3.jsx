@@ -7,7 +7,8 @@ const { tournamentHeadlines: ssHeadlines, topScorers: ssTopScorers,
         goalTimingBuckets: ssTimingBuckets, teamScoringTable: ssScoringTable,
         teamDefensiveTable: ssDefenceTable, biggestWins: ssBiggestWins,
         highestScoringMatches: ssHighScoring, hasGoalData: ssHasGoals,
-        goalOwnershipLeaders: ssOwnerLeaders,
+        goalOwnershipLeaders: ssOwnerLeaders, playerRivalries: ssRivalries,
+        allFinishedMatches: ssAllMatches,
         teamByCode: tbc3, ownerOf: ownerOf3, fmtPct: pct3 } = window.SS;
 
 function sgn3(n) { return (n >= 0 ? "+" : "") + n; }
@@ -58,7 +59,8 @@ function GoalDataNote() {
 /*  STATS — interesting numbers about the tournament                          */
 /* ========================================================================== */
 function Stats({ state, go }) {
-  const played = Object.keys(state.scores || {}).length;
+  const [openRivalry, setOpenRivalry] = useState(null);
+  const played = ssAllMatches(state).length;
   if (!played)
     return <Empty title="No stats yet">
       The numbers light up once the first match is in the books.
@@ -132,6 +134,63 @@ function Stats({ state, go }) {
   // ownership leaders
   const leaders = drawn ? ssOwnerLeaders(state) : [];
   const maxOwnGf = leaders[0]?.goalsFor || 1;
+  const rivalries = drawn ? ssRivalries(state) : [];
+
+  const RivalryRow = (r, i) => {
+    const a = r.players[0], b = r.players[1];
+    const aw = r.wins[a.id] || 0, bw = r.wins[b.id] || 0;
+    const ag = r.goals[a.id] || 0, bg = r.goals[b.id] || 0;
+    const isOpen = openRivalry === r.key;
+    const leader = r.leaderId ? r.players.find(p => p.id === r.leaderId) : null;
+    const color = leader ? (leader.id === a.id ? "var(--pop)" : "var(--blue)") : "var(--paper-3)";
+    return (
+      <div key={r.key} style={{ borderBottom: i < rivalries.length - 1 ? "1px solid rgba(26,22,17,.08)" : "none" }}>
+        <div className="odds-row" onClick={() => setOpenRivalry(isOpen ? null : r.key)}
+             style={{ cursor: "pointer", borderBottom: "none", alignItems: "center" }}>
+          <div className="mono odds-rk">{i + 1}</div>
+          <div className="odds-crest" style={{ width: 72, display: "flex", alignItems: "center", gap: 4 }}>
+            <Avatar player={a} size={28} />
+            <Avatar player={b} size={28} />
+          </div>
+          <div className="odds-name" style={{ width: 230 }}>
+            <div className="odds-title">
+              {a.name} vs {b.name}
+              {(a.id === state.me || b.id === state.me) && <span className="tag" style={{ marginLeft: 6, background: "var(--pop)", color: "#fff", borderColor: "var(--ink)" }}>you</span>}
+            </div>
+            <div className="odds-sub">
+              {r.played} meeting{r.played === 1 ? "" : "s"} · goals {ag}–{bg}
+            </div>
+          </div>
+          <div className="odds-bar"><Bar value={r.leaderShare || 0} color={color} /></div>
+          <div className="display odds-pct" style={{ width: 84 }}>{aw}-{r.draws}-{bw}</div>
+          <span className="mono" style={{ fontSize: 16, opacity: .5, width: 16 }}>{isOpen ? "▾" : "▸"}</span>
+        </div>
+        <div className="teamchips" style={{ padding: "0 12px 10px min(151px, 28vw)" }}>
+          {r.badges.map(badge => <span key={badge} className="tag" style={{ background: badge === "Knockout Blow" ? "var(--red)" : "var(--paper-2)", color: badge === "Knockout Blow" ? "#fff" : "var(--ink-soft)" }}>{badge}</span>)}
+        </div>
+        {isOpen &&
+          <div className="fadein" style={{ padding: "0 12px 14px min(151px, 28vw)", display: "grid", gap: 7 }}>
+            {r.matches.map(m => {
+              const ht = tbc3(m.home), at = tbc3(m.away);
+              const winner = m.winnerOwnerId ? (m.winnerOwnerId === a.id ? a.name : b.name) : "Draw";
+              return (
+                <div key={m.id} className="row" style={{ gap: 10, flexWrap: "wrap", padding: "8px 10px", border: "1px solid var(--line)", borderRadius: 8, background: "var(--paper-2)" }}>
+                  <div className="teamchips">
+                    <TeamChip team={ht} code />
+                    <TeamChip team={at} code />
+                  </div>
+                  <div className="display" style={{ fontSize: 16 }}>{m.hs}<span style={{ opacity: .35, margin: "0 4px" }}>–</span>{m.as}</div>
+                  <div className="mono muted" style={{ fontSize: 11, flex: 1, minWidth: 160 }}>
+                    {m.roundLabel}{m.dateLabel ? ` · ${m.dateLabel}` : ""} · {winner}
+                    {m.pens ? ` · ${m.pens.home}-${m.pens.away} pens` : ""}
+                  </div>
+                </div>
+              );
+            })}
+          </div>}
+      </div>
+    );
+  };
 
   return (
     <div className="fadein">
@@ -242,8 +301,21 @@ function Stats({ state, go }) {
           </div>
         </Section>}
 
+      {drawn &&
+        <Section title="Player rivalries" hint="Head-to-head records when different players' teams meet. Record is shown as first player wins-draws-second player wins.">
+          {rivalries.length ? (
+            <div className="card" style={{ padding: 8 }}>
+              {rivalries.map(RivalryRow)}
+            </div>
+          ) : (
+            <div className="card mono muted" style={{ padding: 18, textAlign: "center", fontSize: 12.5 }}>
+              No player-vs-player results yet. Rivalries appear once two owned teams meet.
+            </div>
+          )}
+        </Section>}
+
       <div className="mono muted" style={{ fontSize: 12, textAlign: "center", margin: "26px 0 6px", lineHeight: 1.5 }}>
-        Stats cover the group stage as results come in. Scorer &amp; timing detail appears when the live feed provides it.
+        Score-based stats cover every finished group and knockout match. Scorer &amp; timing detail appears when the live feed provides it.
       </div>
     </div>
   );
