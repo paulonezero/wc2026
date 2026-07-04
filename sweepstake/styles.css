@@ -154,6 +154,19 @@ label.lbl{font-family:"DM Mono",monospace;font-size:10.5px;letter-spacing:.14em;
 /* ---- confetti --------------------------------------------------------- */
 .confetti-pc{position:fixed;width:10px;height:14px;z-index:200;pointer-events:none;top:-20px;border-radius:2px}
 
+/* ---- Cabo Verde takeover (a joke) ------------------------------------- */
+.cv-takeover{background:
+  radial-gradient(120% 120% at 50% -10%, rgba(201,154,63,.28), transparent 60%),
+  linear-gradient(160deg,#003893 0%,#04122e 55%,#CF2027 160%);
+  backdrop-filter:blur(3px);animation:fadein .45s ease}
+@media (prefers-reduced-motion:reduce){.cv-takeover{animation:none}}
+.cv-banner{display:block;width:100%;border:none;cursor:pointer;margin:0 0 16px;
+  padding:11px 16px;border-radius:12px;text-align:center;
+  font-family:"DM Mono",monospace;font-size:12.5px;letter-spacing:.12em;text-transform:uppercase;
+  font-weight:600;color:#04122e;background:linear-gradient(90deg,#C99A3F,#e9c877,#C99A3F);
+  box-shadow:0 4px 16px rgba(201,154,63,.4)}
+.cv-banner:hover{filter:brightness(1.05)}
+
 /* ---- helpers ---------------------------------------------------------- */
 .row{display:flex;align-items:center}
 .muted{color:var(--ink-soft)}

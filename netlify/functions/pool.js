@@ -26,6 +26,7 @@ function defaultState() {
     scores: {},
     goals: {},        // per-fixture goal events when the API tier provides them
     currentDay: 1,
+    takeover: true,   // Cabo Verde takeover (a joke) — Admin can restore
   };
 }
 

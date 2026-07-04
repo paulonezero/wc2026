@@ -773,6 +773,26 @@ function Admin({ state, update, go, token, replaceState }) {
             )}
           </div>
 
+          {/* Cabo Verde takeover (a joke) */}
+          <div className="panel">
+            <div className="row" style={{ justifyContent: "space-between", alignItems: "baseline", flexWrap: "wrap", gap: 8 }}>
+              <div className="kept">Competition</div>
+              <div className="mono muted" style={{ fontSize: 11 }}>
+                {state.takeover ? "🏆 Cabo Verde takeover ACTIVE" : "running normally"}
+              </div>
+            </div>
+            <div style={{ marginTop: 10, fontSize: 14, lineHeight: 1.55, color: "var(--ink-soft)" }}>
+              {state.takeover
+                ? "The sweepstake is currently halted — Cabo Verde are crowned champions across the whole site (full-screen takeover + Today dispatch). Restore below to bring the real competition back."
+                : "Running as normal. You can re-crown Cabo Verde and halt the competition again below."}
+            </div>
+            <div className="row" style={{ gap: 10, marginTop: 14, alignItems: "center", flexWrap: "wrap" }}>
+              {state.takeover
+                ? <Btn kind="ink" size="sm" onClick={() => update(s => { s.takeover = false; })}>🏳️ Restore normal competition</Btn>
+                : <Btn kind="gold" size="sm" onClick={() => update(s => { s.takeover = true; })}>🏆 Crown Cabo Verde — halt competition</Btn>}
+            </div>
+          </div>
+
           {/* morning snippet */}
           <div className="panel">
             <div className="row" style={{ justifyContent: "space-between", alignItems: "baseline", flexWrap: "wrap", gap: 8 }}>

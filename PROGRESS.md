@@ -3,6 +3,50 @@
 ## Current goal
 Ship the v1 sweepstake app in time for draw day on **2026-06-11**. The app is already deployed; ongoing work is incremental polish.
 
+## Completed change — Cabo Verde takeover (a joke), 2026-07-04
+Goal: after Cabo Verde nearly knocked Argentina out (Argentina 3-2 CPV AET, R32), ship a
+joke that declares the sweepstake over and crowns Cabo Verde (specifically CPV's owner),
+plus a one-off Cabo Verde-only "morning snippet". Stays live until the host restores it.
+
+Key decisions / why:
+- One persistent boolean `state.takeover` (default `true`) gates everything. Content
+  (headline + snippet prose) lives in a code constant `CAPE_VERDE_TAKEOVER` (`data.js`);
+  state only holds on/off — so the joke deploys with the code and the host flips it off.
+- Defaults `true` in BOTH `defaultState()`s (`store.js`, `pool.js`); `net.js normalize`
+  merges defaults over stored state, so absent → ON, saved `false` → persists OFF. This
+  is why it goes live for everyone on deploy with no manual blob edit.
+- No backend/cron changes: the normal snippet cron keeps running, just hidden while
+  takeover is active; it reappears the moment the host restores.
+- Reused existing patterns: `CheatModal` overlay shape, `fireConfetti`, `DailySnippet`
+  (added optional `label`), `Avatar`/`ownerOf`, CSS keyframes `fadein`/`siren-pulse`.
+
+Current state of changed files:
+- `sweepstake/data.js`: added `CAPE_VERDE_TAKEOVER` constant (winner CPV, headline,
+  subhead, snippetLabel, snippetBody prose) + exported on `window.SS`.
+- `sweepstake/store.js`, `netlify/functions/pool.js`: `takeover: true` default.
+- `sweepstake/screens1.jsx`: new `Takeover` (full-screen overlay, crowns CPV owner via
+  `ownerOf`, nation fallback, confetti, Esc/Enter to dismiss) + `TakeoverBanner`; destructure
+  `CAPE_VERDE_TAKEOVER` as `TAKEOVER`; `DailySnippet` gained optional `label`; Today renders
+  the takeover dispatch instead of `state.snippet` when `state.takeover`.
+- `sweepstake/app.jsx`: `peeked` state; renders `<Takeover>`/`<TakeoverBanner>` at top of
+  the app tree when `state.takeover`.
+- `sweepstake/screens2.jsx`: Admin "Competition" panel — Restore / re-Crown button via `update`.
+- `sweepstake/styles.css`: `.cv-takeover` (flag-gradient backdrop) + `.cv-banner` (gold ribbon).
+
+Verified:
+- `node --check` on data.js/store.js/pool.js; `@babel/standalone` transform of all 5 JSX files (all OK).
+- Headless Chromium `--dump-dom` of the served app: overlay renders (COMPETITION HALTED /
+  CABO VERDE ARE YOUR CHAMPIONS), no app console errors.
+- Seeded a completed-draw state (Paul owns CPV): owner branch renders "Paul wins the pot";
+  Today shows the Cabo Verde dispatch (Vozinha / Lopes Cabral / "Forget the rest"). Fresh
+  state renders the nation-only fallback.
+
+Next step:
+- Not yet committed (user hasn't asked). Dynamic click paths (Enter-anyway→banner, Admin
+  toggle) are standard useState/update and weren't exercised by a driver — smoke in a real
+  browser if desired. To end the joke: Admin → "Restore normal competition" (or revert the
+  `takeover` defaults + this feature's code).
+
 ## Completed change — Player rivalries + all-match Stats
 Current goal: implemented a Stats update that includes all finished group + knockout games and adds a player-vs-player rivalry table.
 

@@ -32,6 +32,7 @@
       scores: {},              // fixtureId -> {hs, as}
       goals: {},               // fixtureId -> [{team,scorer,min,injury,type}] (when API provides)
       currentDay: 1,           // tournament matchday pointer (admin-controlled)
+      takeover: true,          // Cabo Verde takeover (a joke) — Admin can restore
     };
   }
 

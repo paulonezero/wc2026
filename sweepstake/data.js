@@ -1042,8 +1042,25 @@
       a.players[1].name.localeCompare(b.players[1].name));
   }
 
+  // ---------------------------------------------------------------------------
+  // CABO VERDE TAKEOVER (a joke) — one-off celebration that halts the sweepstake.
+  // Content lives here in code; state.takeover is just the on/off boolean. Turned
+  // off (and back on) from the Admin panel. See screens1.jsx <Takeover>.
+  // ---------------------------------------------------------------------------
+  const CAPE_VERDE_TAKEOVER = {
+    winner: "CPV",
+    headline: "COMPETITION HALTED",
+    subhead: "CABO VERDE ARE YOUR CHAMPIONS",
+    snippetLabel: "🏆 Champions' dispatch",
+    snippetBody: [
+      "Forget the rest — the tournament peaked last night. Cabo Verde, a chain of islands with barely 600,000 people and playing in their first ever World Cup, walked out in Miami against the reigning world champions and refused to know their place. Argentina 3, Cabo Verde 2 — and the only reason the scoreline reads that way is a cruel 111th-minute own goal. Everything else belonged to the Blue Sharks.",
+      "They came back not once but twice. Messi opened it; Deroy Duarte levelled it. Argentina edged ahead again in extra time; then Sidny Lopes Cabral cut in from the left and curled in what half the planet is already calling the goal of the tournament. Behind them, keeper Vozinha stood on his head — eight saves, Messi denied twice — until the football gods finally cheated. Ranked 67th in the world, they out-played the number one.",
+      "So we're calling it. There is no point continuing. The sweepstake is over and the trophy is going to the islands — the rest of you were only ever playing for second. Cabo Verde: champions of the world (of this sweepstake).",
+    ].join("\n\n"),
+  };
+
   window.SS = {
-    TEAMS, GROUP_LETTERS, CONFED_LABEL, SCALE,
+    TEAMS, GROUP_LETTERS, CONFED_LABEL, SCALE, CAPE_VERDE_TAKEOVER,
     FIXTURES, KICKS, TOURNAMENT_START, TOTAL_DAYS,
     dateForDay, fmtDate, fmtKo, liveDay, fixturesOnDay, mockScore,
     formMap, formDelta, isAlive, teamWinProbs, playerWinProbs,

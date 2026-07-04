@@ -4,7 +4,7 @@
 const { TEAMS: TM, GROUP_LETTERS, fixturesOnDay, fmtDate, fmtKo, dateForDay, liveDay, fmtPct: pct,
         ownerOf, teamByCode, teamsOfPlayer, splitCounts, TOTAL_DAYS,
         groupStageComplete, koFixtures, koRoundLabel,
-        tierLabel, tierSubtitle } = window.SS;
+        tierLabel, tierSubtitle, CAPE_VERDE_TAKEOVER: TAKEOVER } = window.SS;
 
 /* ========================================================================== */
 /*  CHEAT MODAL — the joke overlay for the "Donate to Paul's Revolut" button  */
@@ -37,6 +37,67 @@ function CheatModal({ onClose }) {
         </div>
       </div>
     </div>
+  );
+}
+
+/* ========================================================================== */
+/*  CABO VERDE TAKEOVER — the joke: sweepstake "over", Cabo Verde crowned      */
+/* ========================================================================== */
+function Takeover({ state, onEnter }) {
+  const reduce = typeof window.matchMedia === "function" &&
+    window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+  useEffect(() => {
+    const onKey = e => { if (e.key === "Escape") onEnter(); };
+    window.addEventListener("keydown", onKey);
+    if (!reduce) fireConfetti(150);
+    const t = reduce ? null : setTimeout(() => fireConfetti(90), 750);
+    return () => { window.removeEventListener("keydown", onKey); if (t) clearTimeout(t); };
+  }, []);
+  const cv = teamByCode(TAKEOVER.winner);
+  const owner = ownerOf(state, TAKEOVER.winner);
+  return (
+    <div className="cv-takeover" style={{ position: "fixed", inset: 0, zIndex: 120,
+      display: "flex", alignItems: "center", justifyContent: "center", padding: 20, overflowY: "auto" }}>
+      <div onClick={e => e.stopPropagation()} className="panel fadein"
+           style={{ maxWidth: 520, width: "100%", textAlign: "center", padding: "38px 30px",
+             background: "rgba(6,17,44,.9)", border: "1px solid rgba(201,154,63,.5)", color: "#fff" }}>
+        <div style={{ fontSize: 66, lineHeight: 1, marginBottom: 2, letterSpacing: 6 }}>
+          <span className="siren-pulse">🏆</span>
+        </div>
+        <div className="kept" style={{ color: "var(--gold)", letterSpacing: ".24em" }}>{TAKEOVER.headline}</div>
+        <div className="display" style={{ fontSize: "clamp(30px,7vw,46px)", textTransform: "uppercase",
+          margin: "10px 0 14px", lineHeight: 1.03 }}>{TAKEOVER.subhead}</div>
+        {cv && <div style={{ width: 132, margin: "0 auto 14px", borderRadius: 12, overflow: "hidden",
+          boxShadow: "0 8px 30px rgba(0,0,0,.45)" }}><Crest team={cv} h={84} fs={30} /></div>}
+        {owner
+          ? <div className="row" style={{ justifyContent: "center", gap: 12, alignItems: "center", margin: "6px 0 12px" }}>
+              <Avatar player={owner} size={44} />
+              <div style={{ textAlign: "left" }}>
+                <div className="display" style={{ fontSize: 24, textTransform: "uppercase", lineHeight: 1 }}>{owner.name}</div>
+                <div className="mono" style={{ fontSize: 12.5, color: "var(--gold)", marginTop: 3 }}>wins the pot 🏆</div>
+              </div>
+            </div>
+          : <div className="mono" style={{ margin: "6px 0 12px", color: "var(--gold)", fontSize: 13 }}>
+              Champions of the world (of this sweepstake)
+            </div>}
+        <div className="muted" style={{ fontSize: 14.5, lineHeight: 1.55, maxWidth: 400, margin: "0 auto",
+          color: "rgba(255,255,255,.78)" }}>
+          The Blue Sharks came within a 111th-minute own goal of dumping out the world champions on their
+          debut. That's good enough for us — the rest of the competition is cancelled.
+        </div>
+        <div className="row" style={{ justifyContent: "center", marginTop: 22 }}>
+          <Btn kind="gold" onClick={onEnter}>Enter anyway →</Btn>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function TakeoverBanner({ onOpen }) {
+  return (
+    <button className="cv-banner" onClick={onOpen} title="Cabo Verde have won the sweepstake">
+      🏆 COMPETITION HALTED · CABO VERDE ARE YOUR CHAMPIONS <span aria-hidden="true">▸</span>
+    </button>
   );
 }
 
@@ -218,7 +279,7 @@ function highlightNames(text, names) {
     ? <strong key={i} style={{ fontWeight: 700 }}>{p}</strong>
     : p);
 }
-function DailySnippet({ snippet, players }) {
+function DailySnippet({ snippet, players, label = "Morning snippet" }) {
   if (!snippet || !snippet.body) return null;
   const paragraphs = String(snippet.body).split(/\n{2,}/).map(s => s.trim()).filter(Boolean);
   const names = (players || []).map(p => p.name);
@@ -226,7 +287,7 @@ function DailySnippet({ snippet, players }) {
     <div className="card" style={{ padding: "18px 22px", marginBottom: 22, background: "var(--card)",
       borderLeft: "4px solid var(--gold)" }}>
       <div className="row" style={{ justifyContent: "space-between", alignItems: "baseline", flexWrap: "wrap", gap: 8 }}>
-        <div className="kept" style={{ color: "var(--ink-soft)" }}>Morning snippet</div>
+        <div className="kept" style={{ color: "var(--ink-soft)" }}>{label}</div>
         <div className="mono muted" style={{ fontSize: 11 }}>
           {timeAgo(snippet.generatedAt)}{snippet.source === "manual" ? " · manual" : ""}
         </div>
@@ -335,8 +396,11 @@ function Today({ state, go }) {
         <div className="muted" style={{ fontSize: 14 }}>{dateStr} · {inKO ? "knockout stage — sudden death" : "group stage"}</div>
       </div>
 
-      {/* morning snippet (cron- or admin-generated) */}
-      <DailySnippet snippet={state.snippet} players={state.players} />
+      {/* morning snippet (cron- or admin-generated) — or the Cabo Verde takeover dispatch */}
+      {state.takeover
+        ? <DailySnippet label={TAKEOVER.snippetLabel} players={state.players}
+            snippet={{ body: TAKEOVER.snippetBody, generatedAt: Date.now(), source: "manual" }} />
+        : <DailySnippet snippet={state.snippet} players={state.players} />}
 
       {/* your teams today */}
       {myToday.length > 0 &&

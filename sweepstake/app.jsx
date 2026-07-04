@@ -12,6 +12,7 @@ function App() {
   const [me, setMe] = useState(() => { try { return localStorage.getItem(ME_KEY) || null; } catch (e) { return null; } });
   const [token, setToken] = useState(() => { try { return localStorage.getItem(TOKEN_KEY) || null; } catch (e) { return null; } });
   const [tab, setTab] = useState(null);
+  const [peeked, setPeeked] = useState(false);   // dismissed the Cabo Verde takeover overlay?
 
   const admin = !!token;
   const drawn = !!(state && state.draw && state.draw.done);
@@ -131,6 +132,9 @@ function App() {
 
   return (
     <div className="app">
+      {state.takeover && (peeked
+        ? <TakeoverBanner onOpen={() => setPeeked(false)} />
+        : <Takeover state={view} onEnter={() => setPeeked(true)} />)}
       <div className="topbar">
         <div className="brand" onClick={() => go(drawn ? "today" : (admin ? "admin" : "signup"))}>
           <div className="mark">
